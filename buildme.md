@@ -326,3 +326,12 @@ CMD ["nginx", "-g", "daemon off;"]
 5. **部署**：导出镜像到目标环境
 
 通过以上步骤，您可以成功构建和部署BXDC Bot的三个镜像，实现完整的AI助手功能，同时优化开发和构建过程，提高效率。
+
+
+
+更新代码测试
+1.构建相关的镜像文件
+
+docker-compose build agent-core
+docker-compose build frontend
+docker-compose up -d 完成镜像的重启
