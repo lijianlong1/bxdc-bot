@@ -10,6 +10,13 @@ services:
     environment:
       # Java Gateway配置
       - JAVA_GATEWAY_TOKEN=${JAVA_GATEWAY_TOKEN:-your-secure-token-here}
+      # 服务器配置
+      - server.address=0.0.0.0
+      - server.port=18080
+      # 上游服务配置
+      - agent.core.url=http://agent-core:3000
+      # CORS配置
+      - app.cors.allowed-origins=http://localhost:5173,http://127.0.0.1:5173
     restart: unless-stopped
 
   agent-core:
@@ -26,13 +33,13 @@ services:
       - PORT=${PORT:-3000}
       - HOST=${HOST:-0.0.0.0}
       # 记忆服务配置
-      - MEM0_URL=${MEM0_URL:-http://39.104.81.41:8001}
+      - MEM0_URL=${MEM0_URL:-}
       # 大模型API配置
       - OPENAI_API_BASE=${OPENAI_API_BASE:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME:-gpt-4}
       # Java Gateway配置
-      - JAVA_GATEWAY_URL=${JAVA_GATEWAY_URL:-http://127.0.0.1:18080}
+      - JAVA_GATEWAY_URL=${JAVA_GATEWAY_URL:-http://skill-gateway:18080}
       - JAVA_GATEWAY_TOKEN=${JAVA_GATEWAY_TOKEN:-your-secure-token-here}
       # 技能配置
       - AGENT_SKILLS_DIRS=${AGENT_SKILLS_DIRS:-}

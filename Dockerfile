@@ -22,8 +22,10 @@ RUN apt-get update && apt-get install -y vim curl gnupg && \
 # 3. 安装 Nginx
 RUN apt-get update && apt-get install -y nginx && rm -rf /var/lib/apt/lists/*
 
-# 4. 复制全部项目到镜像（包含前端+后端）
-COPY . /app
+# 4. 复制项目到镜像（包含前端+后端）
+COPY ./backend/agent-core /app/backend/agent-core
+COPY ./backend/skill-gateway /app/backend/skill-gateway
+COPY ./frontend /app/frontend
 
 # agent-core
 WORKDIR /app/backend/agent-core
