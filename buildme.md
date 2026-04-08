@@ -335,3 +335,7 @@ CMD ["nginx", "-g", "daemon off;"]
 docker-compose build agent-core
 docker-compose build frontend
 docker-compose up -d 完成镜像的重启
+测试处理
+- 测试agent-core服务
+- 测试frontend服务
+- 测试skill-gateway服务
