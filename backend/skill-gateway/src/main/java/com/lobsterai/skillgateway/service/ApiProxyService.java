@@ -1,61 +1,211 @@
 package com.lobsterai.skillgateway.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lobsterai.skillgateway.audit.ContentTypeNormalizingInterceptor;
+import com.lobsterai.skillgateway.audit.GatewayHttpClientAuditInterceptor;
+import com.lobsterai.skillgateway.audit.HttpClientAuditContext;
+import com.lobsterai.skillgateway.audit.HttpClientAuditMode;
+import com.lobsterai.skillgateway.http.OutboundUrlNormalizer;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.lang.reflect.Array;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 /**
- * API 代理服务。
- * <p>
- * 封装 RestTemplate，提供通用的 HTTP 请求转发能力。
- * </p>
+ * API 代理服务：封装 {@link RestTemplate}，供 Skill 对外 HTTP 与内部 HTTP 调用共用。
  */
 @Service
 public class ApiProxyService {
 
-    private final RestTemplate restTemplate;
+    private final RestTemplate gatewayRestTemplate;
     private final ObjectMapper objectMapper;
+    private final GatewayHttpClientAuditInterceptor auditInterceptor;
+    private final ContentTypeNormalizingInterceptor contentTypeInterceptor;
 
-    public ApiProxyService() {
-        this.restTemplate = new RestTemplate();
-        this.objectMapper = new ObjectMapper();
+    public ApiProxyService(
+            RestTemplate gatewayRestTemplate,
+            ObjectMapper objectMapper,
+            GatewayHttpClientAuditInterceptor auditInterceptor,
+            ContentTypeNormalizingInterceptor contentTypeInterceptor
+    ) {
+        this.gatewayRestTemplate = gatewayRestTemplate;
+        this.objectMapper = objectMapper;
+        this.auditInterceptor = auditInterceptor;
+        this.contentTypeInterceptor = contentTypeInterceptor;
+    }
+
+    public Object callApi(String url, String method, Map<String, ?> headers, Object body) {
+        return callApi(url, method, headers, body, HttpClientAuditMode.NONE);
+    }
+
+    public Object callApi(
+            String url,
+            String method,
+            Map<String, ?> headers,
+            Object body,
+            HttpClientAuditMode mode
+    ) {
+            HttpClientAuditContext.set(mode);
+        try {
+            String outboundUrl = OutboundUrlNormalizer.normalizeForOutboundHttp(url);
+            HttpHeaders httpHeaders = new HttpHeaders();
+            applyOutboundHeaders(httpHeaders, headers);
+            Object normalizedBody = normalizeBodyForContentType(body, httpHeaders);
+            HttpEntity<Object> entity = new HttpEntity<>(normalizedBody, httpHeaders);
+            ResponseEntity<String> response = gatewayRestTemplate.exchange(
+                    outboundUrl,
+                    HttpMethod.valueOf(method.toUpperCase()),
+                    entity,
+                    String.class
+            );
+            return parseResponseBody(response);
+        } finally {
+            HttpClientAuditContext.clear();
+        }
+    }
+
+    public Object callApi(String url, String method, Map<String, ?> headers, Object body, int timeoutSeconds) {
+        return callApi(url, method, headers, body, HttpClientAuditMode.NONE, timeoutSeconds);
+    }
+
+    public Object callApi(
+            String url,
+            String method,
+            Map<String, ?> headers,
+            Object body,
+            HttpClientAuditMode mode,
+            int timeoutSeconds
+    ) {
+        HttpClientAuditContext.set(mode);
+        try {
+            String outboundUrl = OutboundUrlNormalizer.normalizeForOutboundHttp(url);
+            HttpHeaders httpHeaders = new HttpHeaders();
+            applyOutboundHeaders(httpHeaders, headers);
+            Object normalizedBody = normalizeBodyForContentType(body, httpHeaders);
+            HttpEntity<Object> entity = new HttpEntity<>(normalizedBody, httpHeaders);
+
+            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory();
+            factory.setConnectTimeout(timeoutSeconds * 1000);
+            factory.setReadTimeout(timeoutSeconds * 1000);
+            BufferingClientHttpRequestFactory bufferingFactory = new BufferingClientHttpRequestFactory(factory);
+            RestTemplate timedTemplate = new RestTemplate(bufferingFactory);
+            timedTemplate.setInterceptors(Arrays.asList(contentTypeInterceptor, auditInterceptor));
+
+            ResponseEntity<String> response = timedTemplate.exchange(
+                    outboundUrl,
+                    HttpMethod.valueOf(method.toUpperCase()),
+                    entity,
+                    String.class
+            );
+            return parseResponseBody(response);
+        } finally {
+            HttpClientAuditContext.clear();
+        }
     }
 
     /**
-     * 调用外部 API。
-     *
-     * @param url     目标 URL
-     * @param method  HTTP 方法 (GET, POST, etc.)
-     * @param headers 请求头
-     * @param body    请求体
-     * @return 响应体
+     * {@link SkillController.ApiRequest#getHeaders()} may use string values or JSON arrays (single or multi),
+     * matching OpenAPI / exported configs; each becomes one or more {@code HttpHeaders#add} calls.
      */
-    public Object callApi(String url, String method, Map<String, String> headers, Object body) {
-        HttpHeaders httpHeaders = new HttpHeaders();
-        if (headers != null) {
-            headers.forEach(httpHeaders::add);
+    static void applyOutboundHeaders(HttpHeaders target, Map<String, ?> headers) {
+        if (headers == null || target == null) {
+            return;
         }
+        for (Map.Entry<String, ?> e : headers.entrySet()) {
+            if (e.getKey() == null) {
+                continue;
+            }
+            String name = e.getKey();
+            addHeaderValue(target, name, e.getValue());
+        }
+    }
 
-        HttpEntity<Object> entity = new HttpEntity<>(body, httpHeaders);
-        ResponseEntity<String> response = restTemplate.exchange(
-                url,
-                HttpMethod.valueOf(method.toUpperCase()),
-                entity,
-                String.class
-        );
+    private static void addHeaderValue(HttpHeaders target, String name, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof String) {
+            target.add(name, (String) value);
+        } else if (value instanceof Collection) {
+            @SuppressWarnings("unchecked")
+            Collection<Object> c = (Collection<Object>) value;
+            for (Object o : c) {
+                if (o != null) {
+                    target.add(name, o.toString());
+                }
+            }
+        } else if (value.getClass().isArray()) {
+            int n = Array.getLength(value);
+            for (int i = 0; i < n; i++) {
+                Object o = Array.get(value, i);
+                if (o != null) {
+                    target.add(name, o.toString());
+                }
+            }
+        } else {
+            target.add(name, value.toString());
+        }
+    }
 
+    /**
+     * Prevents RestTemplate from wrapping a JSON string body as a JSON string value
+     * when Content-Type is application/json (double-quote escaping bug).
+     * Also recursively parses object/array values that arrive as JSON strings
+     * (e.g. {@code "data":"{\"app\":\"...\"}"} → {@code "data":{...}}).
+     */
+    private Object normalizeBodyForContentType(Object body, HttpHeaders httpHeaders) {
+        MediaType contentType = httpHeaders.getContentType();
+        boolean isJsonType = contentType != null && MediaType.APPLICATION_JSON.includes(contentType);
+        return deepNormalize(body, isJsonType);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object deepNormalize(Object node, boolean isJsonType) {
+        if (node instanceof String) {
+            String s = ((String) node).trim();
+            if (s.isEmpty()) return node;
+            if (isJsonType && (s.startsWith("{") || s.startsWith("["))) {
+                try {
+                    return objectMapper.readValue(s, Object.class);
+                } catch (Exception ignored) {
+                }
+            }
+            return node;
+        }
+        if (node instanceof Map) {
+            Map<String, Object> map = (Map<String, Object>) node;
+            for (Map.Entry<String, Object> e : map.entrySet()) {
+                e.setValue(deepNormalize(e.getValue(), isJsonType));
+            }
+            return map;
+        }
+        if (node instanceof List) {
+            List<Object> list = (List<Object>) node;
+            for (int i = 0; i < list.size(); i++) {
+                list.set(i, deepNormalize(list.get(i), isJsonType));
+            }
+            return list;
+        }
+        return node;
+    }
+
+    private Object parseResponseBody(ResponseEntity<String> response) {
         String responseBody = response.getBody();
         if (responseBody == null) {
             return null;
         }
-
         MediaType contentType = response.getHeaders().getContentType();
         if (contentType != null && (
                 MediaType.APPLICATION_JSON.includes(contentType)
@@ -64,10 +214,8 @@ public class ApiProxyService {
             try {
                 return objectMapper.readValue(responseBody, Object.class);
             } catch (Exception ignored) {
-                // Fall back to the raw payload when the body is JSON-like but not strict JSON.
             }
         }
-
         return responseBody;
     }
 }

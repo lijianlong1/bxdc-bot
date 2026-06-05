@@ -1,6 +1,9 @@
 package com.lobsterai.skillgateway.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
 
 /**
@@ -9,43 +12,46 @@ import java.time.LocalDateTime;
  * 映射到数据库中的 audit_logs 表，存储 Skill 执行的详细记录。
  * </p>
  */
-@Entity
-@Table(name = "audit_logs")
+@TableName("audit_logs")
 public class AuditLog {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /**
      * 调用 Skill 的 Agent ID。
      */
+    @TableField("agent_id")
     private String agentId;
 
     /**
      * 调用的 Skill 名称 (如 SSH, API)。
      */
+    @TableField("skill_name")
     private String skillName;
 
     /**
      * 执行的具体命令或 URL。
      */
+    @TableField("command_or_url")
     private String commandOrUrl;
     
     /**
      * 执行参数 (如主机名、HTTP 方法)。
      */
-    @Column(columnDefinition = "TEXT")
+    @TableField("params")
     private String params;
     
     /**
      * 执行结果状态 (SUCCESS, FAILURE)。
      */
+    @TableField("status")
     private String status;
 
     /**
      * 记录生成的时间戳。
      */
+    @TableField("timestamp")
     private LocalDateTime timestamp;
 
     // Getters and Setters

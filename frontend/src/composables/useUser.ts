@@ -1,10 +1,18 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { apiUrl } from '../services/config';
 
 export interface User {
   id: string;
   nickname: string;
   avatar: string;
+}
+
+export interface LlmSettingsResponse {
+  apiBase: string | null;
+  modelName: string | null;
+  hasApiKey: boolean;
+  hasEffectiveApiKey: boolean;
 }
 
 // Global state
@@ -18,7 +26,7 @@ export function useUser() {
 
   async function login(id: string) {
     try {
-      const res = await fetch('http://localhost:18080/api/auth/login', {
+      const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id })
@@ -40,17 +48,26 @@ export function useUser() {
     }
   }
 
-  async function register(id: string, nickname: string, redirect = true) {
+  async function register(
+    id: string,
+    nickname: string,
+    systemAdminPassword: string,
+    redirect = true
+  ) {
     try {
-      const res = await fetch('http://localhost:18080/api/auth/register', {
+      const res = await fetch(apiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, nickname })
+        body: JSON.stringify({ id, nickname, systemAdminPassword })
       });
 
       if (!res.ok) {
           const error = await res.json().catch(() => ({ error: 'Registration failed' }));
-          throw new Error(error.error || 'Registration failed');
+          const msg =
+            res.status === 403
+              ? (error.error || '暂无注册权限，请联系管理员获取授权凭据。')
+              : (error.error || 'Registration failed');
+          throw new Error(msg);
       }
 
       const user = await res.json();
@@ -78,7 +95,7 @@ export function useUser() {
   async function restoreSession() {
     if (!token.value) return;
     try {
-      const res = await fetch(`http://localhost:18080/api/user/${token.value}`);
+      const res = await fetch(apiUrl(`/api/user/${token.value}`));
       if (res.ok) {
         currentUser.value = await res.json();
       } else {
@@ -91,21 +108,73 @@ export function useUser() {
     }
   }
 
+  function userHeadersJson(userId: string): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    };
+  }
+
   async function updateAvatar(id: string, avatar: string) {
     try {
-        const res = await fetch(`http://localhost:18080/api/user/${id}/avatar`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ avatar })
-        });
-        if (res.ok) {
-            const user = await res.json();
-            currentUser.value = user;
-            return user;
-        }
+      const res = await fetch(apiUrl(`/api/user/${id}/avatar`), {
+        method: 'PUT',
+        headers: userHeadersJson(id),
+        body: JSON.stringify({ avatar }),
+      });
+      if (res.ok) {
+        const user = await res.json();
+        currentUser.value = user;
+        return user;
+      }
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || '更新头像失败');
     } catch (e) {
-        console.error('Failed to update avatar:', e);
+      console.error('Failed to update avatar:', e);
+      throw e;
     }
+  }
+
+  async function updateProfile(
+    id: string,
+    body: { nickname?: string; avatar?: string },
+  ): Promise<User> {
+    const res = await fetch(apiUrl(`/api/user/${id}/profile`), {
+      method: 'PUT',
+      headers: userHeadersJson(id),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || '保存失败');
+    }
+    const user = (await res.json()) as User;
+    currentUser.value = user;
+    return user;
+  }
+
+  async function fetchLlmSettings(userId: string): Promise<LlmSettingsResponse> {
+    const res = await fetch(apiUrl(`/api/user/${userId}/llm-settings`));
+    if (!res.ok) {
+      throw new Error('Failed to load LLM settings');
+    }
+    return res.json();
+  }
+
+  async function saveLlmSettings(
+    userId: string,
+    body: { apiBase: string; modelName: string; apiKey?: string }
+  ): Promise<LlmSettingsResponse> {
+    const res = await fetch(apiUrl(`/api/user/${userId}/llm-settings`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || 'Save failed');
+    }
+    return res.json();
   }
 
   return {
@@ -115,6 +184,9 @@ export function useUser() {
     register,
     logout,
     restoreSession,
-    updateAvatar
+    updateAvatar,
+    updateProfile,
+    fetchLlmSettings,
+    saveLlmSettings,
   };
 }

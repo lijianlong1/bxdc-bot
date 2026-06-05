@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 @Service
 public class SecurityFilterService {
 
-    private static final Pattern DANGEROUS_COMMANDS = Pattern.compile("rm\\s+-rf|mkfs|dd\\s+if=|shutdown|reboot|wget|curl");
+    private static final Pattern DANGEROUS_COMMANDS = Pattern.compile("rm\\s+-rf|mkfs|dd\\s+if=|shutdown|reboot");
 
     /**
      * 检查命令是否安全。

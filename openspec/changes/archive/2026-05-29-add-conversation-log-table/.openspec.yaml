@@ -1,0 +1,12 @@
+name: add-conversation-log-table
+title: 新增对话日志数据表
+description: 新增对话日志数据表和工具调用日志表，存储完整的对话信息和工具调用详情，包括用户ID、会话ID、对话时间、响应时长、错误信息、工具调用参数和结果等，便于问题排查和日志分析。支持无感加表，无需手动操作数据库。
+author: 
+created: 2026-05-29
+status: completed
+
+apply:
+  requires:
+    - proposal
+    - design
+    - tasks

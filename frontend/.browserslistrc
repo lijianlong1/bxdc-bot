@@ -1,0 +1,3 @@
+# Minimum engine aligned with product support (embedded WebViews / legacy Chrome)
+Chrome >= 86
+Android >= 86

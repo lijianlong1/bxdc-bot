@@ -1,7 +1,9 @@
 package com.lobsterai.skillgateway;
 
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Skill Gateway 应用程序入口类。
@@ -11,6 +13,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * </p>
  */
 @SpringBootApplication
+@EnableScheduling
+@MapperScan("com.lobsterai.skillgateway.mapper")
 public class SkillGatewayApplication {
 
     /**

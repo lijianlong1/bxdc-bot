@@ -1,0 +1,61 @@
+# ====================================================================
+# ⚠️  本文件是本地开发配置模板（application.properties.example）。
+# ⚠️  真实配置 application.properties 已被 .gitignore 排除，
+# ⚠️  每个人需要 cp 本文件为 application.properties 并填写真实密码。
+#
+# 快速上手：
+#   cp backend/skill-gateway/src/main/resources/application.properties.example \
+#      backend/skill-gateway/src/main/resources/application.properties
+#   # 然后把 password= 后面的占位符改成你本机 MySQL 的 root 密码
+#   # 把 sql.init.mode 改成 always 让 Spring 自动跑 schema-mysql.sql 建表
+# ====================================================================
+
+spring.datasource.url=jdbc:mysql://127.0.0.1:3306/fishtank?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=UTC&allowPublicKeyRetrieval=true
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.datasource.username=root
+# ↓↓↓ 把这一行的占位符改成你本机 MySQL root 密码 ↓↓↓
+spring.datasource.password=YOUR_LOCAL_MYSQL_PASSWORD
+# sql.init.mode=always  → 启动时自动跑 schema-mysql.sql 建表（首次启动或 schema 变更后用）
+# sql.init.mode=never   → 跳过 schema 初始化（生产或 schema 已就位时用，安全）
+spring.sql.init.mode=always
+spring.sql.init.schema-locations=classpath:schema-mysql.sql
+
+# MyBatis-Plus
+mybatis-plus.mapper-locations=classpath*:/mapper/**/*.xml
+mybatis-plus.type-aliases-package=com.lobsterai.skillgateway.entity
+mybatis-plus.configuration.log-impl=org.apache.ibatis.logging.stdout.StdOutImpl
+mybatis-plus.global-config.db-config.id-type=auto
+mybatis-plus.type-enums-package=com.lobsterai.skillgateway.entity
+
+# 平台 Skill 行（createdBy=public）的写操作仅允许用户 ID 890728（见 SkillService.SKILL_PLATFORM_ADMIN_USER_ID，非配置项）
+
+# Disable async request timeout for SSE streams (async polling can idle for minutes)
+spring.mvc.async.request-timeout=-1
+
+# Gateway listener
+server.address=0.0.0.0
+server.port=18080
+
+# Upstream agent-core service
+agent.core.url=http://localhost:3000
+
+# Registration gate: only clients providing this password may create new users (override in prod if needed)
+app.registration.admin-password=Bxdc1357
+
+# Frontend origins allowed by CORS (comma-separated, supports patterns like http://localhost:*)
+app.cors.allowed-origins=http://localhost:*,http://127.0.0.1:*
+
+# LLM 原始 HTTP 审计（agent-core POST /api/internal/llm-http-audit/events）单条 JSON 最大字节数
+app.llm-http-audit.max-payload-bytes=1048576
+
+# Skill 对外 HTTP/SSH 审计与 agent-core 回调审计（单字段最大字节；逗号分隔的额外脱敏 header 名）
+app.gateway-audit.max-payload-bytes=1048576
+app.gateway-audit.redacted-headers=
+
+# Linux script built-in skill server registry examples
+# Linux 脚本与 SSH（台账模式）：连接信息存于 server_ledgers 表，不再使用下方按名映射。
+# skill.linux-script.servers.* 已废弃（若存在旧文档可删除）。
+# skill.linux-script.servers.demo.host=127.0.0.1
+# skill.linux-script.servers.demo.port=22
+# skill.linux-script.servers.demo.username=root
+# skill.linux-script.servers.demo.private-key-path=/path/to/private_key

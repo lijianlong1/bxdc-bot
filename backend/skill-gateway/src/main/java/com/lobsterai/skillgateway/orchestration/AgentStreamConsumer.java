@@ -23,10 +23,11 @@ public class AgentStreamConsumer {
      *
      * @param instruction 用户指令
      * @param context     上下文信息
+     * @param history     历史对话
      * @return 包含 Agent 执行状态的 Flux 流
      */
-    public Flux<String> executeAndStream(String instruction, Object context) {
-        return taskDispatcherService.dispatchTask(instruction, context)
+    public Flux<String> executeAndStream(String instruction, Object context, Object history) {
+        return taskDispatcherService.dispatchTask(instruction, context, history)
                 .doOnNext(event -> {
                     // Here we can parse the event and log it, or update DB status
                     System.out.println("Received Agent Event: " + event);

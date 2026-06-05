@@ -6,13 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "test": "vitest run",
+    "preview": "vite preview",
+    "vendor:twemoji": "node scripts/vendor-twemoji-assets.mjs",
+    "prune:twemoji": "node scripts/prune-twemoji-assets.mjs"
   },
   "dependencies": {
     "@tdesign-vue-next/chat": "^0.5.0",
     "less": "^4.5.1",
     "markdown-it": "^14.1.1",
+    "tdesign-icons-vue-next": "^0.4.2",
     "tdesign-vue-next": "^1.18.3",
+    "twemoji": "^14.0.2",
     "vue": "^3.5.25",
     "vue-router": "^5.0.3"
   },
@@ -28,6 +33,7 @@
     "tailwindcss": "^4.2.1",
     "typescript": "~5.9.3",
     "vite": "^7.3.1",
+    "vitest": "^4.1.2",
     "vue-tsc": "^3.1.5"
   }
 }

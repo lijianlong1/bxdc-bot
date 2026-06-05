@@ -2,12 +2,18 @@
 node_modules/
 
 # Build outputs
-dist/
+# dist/ 在部署环境（内网）从源码 npm run build 生成，不进 git
 dist-ssr/
 target/
+frontend/dist/
+backend/agent-core/dist/
+frontend/dist.zip
+frontend/dist 2.zip
 
 # IDE & OS
 .DS_Store
+# Accidental nested checkout (do not commit)
+backend/agent-core/go-cursor-help/
 .cursor/
 .vscode/
 .idea/
@@ -18,6 +24,37 @@ target/
 .env.local
 *.local
 
+# Local dev config (per-developer MySQL password etc.)
+# Use the .example template:
+#   cp backend/skill-gateway/src/main/resources/application.properties.example \
+#      backend/skill-gateway/src/main/resources/application.properties
+backend/skill-gateway/src/main/resources/application.properties
+backend/skill-gateway/src/main/resources/application-local.properties
+
 # Database & runtime data
 backend/skill-gateway/data/
+backend/skill-gateway/.m2-test/
+backend/skill-gateway/skills-export.csv
+backend/skill-gateway/seed-snapshot.mv.db
 backend/agent-core/memories.db
+
+# Backups
+frontend-react-backup/
+0427/
+
+
+# skills
+skills/
+
+# Maven
+backend/skill-gateway/apache-maven-3.9.6/
+
+# One-click scripts
+start-services.bat
+stop-services.bat
+
+# TS增量编译缓存，全局忽略所有tsbuildinfo
+*.tsbuildinfo
+# 精准忽略当前模块（二选一即可，上面全局更省心）
+backend/agent-core/dist/*.tsbuildinfo
+

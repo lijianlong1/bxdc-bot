@@ -1,5 +1,7 @@
 package com.lobsterai.skillgateway.config;
 
+import com.lobsterai.skillgateway.util.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,11 +17,13 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
 /**
@@ -33,6 +37,9 @@ import java.io.IOException;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    @Value("${app.cors.allowed-origins:http://localhost:5173}")
+    private String allowedOrigins;
+
     /**
      * 配置安全过滤器链。
      *
@@ -45,9 +52,15 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/skills/**").authenticated()
+            .authorizeRequests(auth -> auth
+                .antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .antMatchers(HttpMethod.GET, "/api/skills", "/api/skills/*").permitAll()
+                .antMatchers(HttpMethod.GET, "/api/skills/async-tasks/*/wait").permitAll()
+                .antMatchers(HttpMethod.GET, "/api/skills/text-prompts", "/api/skills/text-prompts/**").permitAll()
+                .antMatchers(HttpMethod.POST, "/api/skills/enum-source").permitAll()
+                .antMatchers(HttpMethod.GET, "/api/system-skills/**").permitAll()
+                .antMatchers("/api/skills/**").authenticated()
+                .antMatchers("/api/system-skills/**").authenticated()
                 .anyRequest().permitAll()
             )
             .addFilterBefore(new ApiTokenFilter(), UsernamePasswordAuthenticationFilter.class);
@@ -57,7 +70,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .collect(Collectors.toList());
+        configuration.setAllowedOriginPatterns(origins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
@@ -78,7 +95,7 @@ public class SecurityConfig {
 
         private String getValidToken() {
             String envToken = System.getenv("JAVA_GATEWAY_TOKEN");
-            if (envToken != null && !envToken.isBlank()) {
+            if (envToken != null && !StringUtils.isBlank(envToken)) {
                 return envToken;
             }
             return DEFAULT_TOKEN;
@@ -96,7 +113,19 @@ public class SecurityConfig {
         @Override
         protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
                 throws ServletException, IOException {
-            if (!request.getRequestURI().startsWith("/api/skills/")) {
+            String uri = request.getRequestURI();
+            String method = request.getMethod();
+            boolean isSkillRoute = uri.startsWith("/api/skills");
+            boolean isSystemSkillRoute = uri.startsWith("/api/system-skills");
+            boolean isReadOnlySkillRequest = "GET".equalsIgnoreCase(method);
+            boolean isEnumSource = uri.equals("/api/skills/enum-source") && "POST".equalsIgnoreCase(method);
+            boolean internalAuditPost = uri.startsWith("/api/internal/llm-http-audit") && "POST".equalsIgnoreCase(method);
+            boolean isPollingAudit = uri.startsWith("/api/internal/polling-audit") && "POST".equalsIgnoreCase(method);
+            boolean needsToken = ((isSkillRoute && !isReadOnlySkillRequest) && !isEnumSource)
+                    || (isSystemSkillRoute && !isReadOnlySkillRequest)
+                    || internalAuditPost
+                    || isPollingAudit;
+            if (!needsToken) {
                 filterChain.doFilter(request, response);
                 return;
             }

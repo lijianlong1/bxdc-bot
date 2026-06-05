@@ -1,19 +1,32 @@
 package com.lobsterai.skillgateway.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "users")
+@TableName("users")
 public class User {
-    @Id
+    @TableId(type = IdType.INPUT)
     private String id; // 6-digit ID
 
     private String nickname;
     private String avatar; // Emoji
     private LocalDateTime createdAt;
+
+    /** OpenAI-compatible API base URL; optional per-user override. */
+    @TableField("llm_api_base")
+    private String llmApiBase;
+
+    @TableField("llm_model_name")
+    private String llmModelName;
+
+    /** Stored in plaintext (v1); never serialized to JSON for clients. */
+    @JsonIgnore
+    @TableField("llm_api_key")
+    private String llmApiKey;
 
     public String getId() {
         return id;
@@ -45,5 +58,29 @@ public class User {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getLlmApiBase() {
+        return llmApiBase;
+    }
+
+    public void setLlmApiBase(String llmApiBase) {
+        this.llmApiBase = llmApiBase;
+    }
+
+    public String getLlmModelName() {
+        return llmModelName;
+    }
+
+    public void setLlmModelName(String llmModelName) {
+        this.llmModelName = llmModelName;
+    }
+
+    public String getLlmApiKey() {
+        return llmApiKey;
+    }
+
+    public void setLlmApiKey(String llmApiKey) {
+        this.llmApiKey = llmApiKey;
     }
 }

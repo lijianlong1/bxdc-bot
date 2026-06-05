@@ -1,3 +1,40 @@
+/**
+ * 技能管理器模块
+ * 
+ * 模块职责：
+ * 1. 发现并加载 SKILL.md 技能定义文件
+ * 2. 解析 YAML Frontmatter 获取技能元数据
+ * 3. 将技能转换为 LangChain DynamicTool
+ * 4. 提供技能描述和搜索能力
+ * 
+ * 技能发现机制：
+ * 1. 扫描默认目录：./SKILLs/
+ * 2. 扫描环境变量 AGENT_SKILLS_DIRS 指定的额外目录
+ * 3. 递归查找所有 SKILL.md 文件
+ * 4. 解析 Frontmatter 和 Markdown 内容
+ * 
+ * 技能元数据：
+ * - name: 技能唯一标识符
+ * - description: 技能描述（用于提示词和工具描述）
+ * - category: 技能分类
+ * - tags: 标签数组
+ * - metadata: 扩展元数据键值对
+ * 
+ * 工具生成：
+ * - 每个技能生成一个 DynamicTool
+ * - 工具名称格式：skill_{normalized_name}
+ * - 工具描述包含：描述、元数据摘要、使用示例
+ * 
+ * 缓存机制：
+ * - 启动时一次性加载所有技能
+ * - 提供 getLangChainTools() 获取工具数组
+ * - 提供 describeTool() 查询工具信息
+ * 
+ * @module SkillManager
+ * @author Agent Core Team
+ * @since 1.0.0
+ */
+
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
@@ -96,8 +133,17 @@ function isIgnoredDirectory(dirName: string): boolean {
   return dirName === '.git' || dirName === 'node_modules' || dirName === 'dist';
 }
 
+function isDemoSkill(skill: RegisteredSkill): boolean {
+  const category = normalizeText(String(skill.metadata?.category || '')).toLowerCase();
+  return category === 'demo' || category === 'example';
+}
+
 @Injectable()
 export class SkillManager {
+  private getRoutableSkills(): RegisteredSkill[] {
+    return this.listSkills().filter((skill) => !isDemoSkill(skill));
+  }
+
   private getConfiguredRoots(): string[] {
     const envValue = process.env.AGENT_SKILLS_DIRS || '';
     const envRoots = envValue
@@ -209,7 +255,7 @@ export class SkillManager {
   }
 
   buildSkillPromptContext(): string {
-    const skills = this.listSkills();
+    const skills = this.getRoutableSkills();
     if (skills.length === 0) return '';
 
     const lines = skills.map((skill) => {
@@ -244,7 +290,7 @@ export class SkillManager {
   }
 
   getLangChainTools(): DynamicTool[] {
-    return this.listSkills().map((skill) => new DynamicTool({
+    return this.getRoutableSkills().map((skill) => new DynamicTool({
       name: skill.toolName,
       description: [
         `Load the full SKILL.md instructions for "${skill.name}".`,

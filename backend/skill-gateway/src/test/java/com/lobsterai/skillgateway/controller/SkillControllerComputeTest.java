@@ -7,13 +7,23 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
+import java.time.ZoneId;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
  * Compute 端点单元测试。
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        "spring.datasource.url=jdbc:h2:mem:skill_compute_test;DB_CLOSE_DELAY=-1;MODE=LEGACY",
+        "spring.datasource.driverClassName=org.h2.Driver",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=password",
+        "spring.sql.init.mode=always",
+        "spring.sql.init.schema-locations=classpath:schema-h2.sql"
+})
 @AutoConfigureMockMvc
 class SkillControllerComputeTest {
 
@@ -148,14 +158,39 @@ class SkillControllerComputeTest {
 
     @Test
     void timestampToDate_seconds() throws Exception {
-        // 1773013121 秒 = 2026-03-08，秒级时间戳应自动转为毫秒
+        String expectedDate = Instant.ofEpochSecond(1773013121L)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+                .toString();
         String body = "{\"operation\":\"timestamp_to_date\",\"operands\":[1773013121]}";
         mockMvc.perform(post("/api/skills/compute")
                         .header("X-Agent-Token", TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result").value("2026-03-08"));
+                .andExpect(jsonPath("$.result").value(expectedDate));
+    }
+
+    @Test
+    void dateDiffDays() throws Exception {
+        String body = "{\"operation\":\"date_diff_days\",\"operands\":[\"2026-03-08\",\"2026-03-12\"]}";
+        mockMvc.perform(post("/api/skills/compute")
+                        .header("X-Agent-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value(4));
+    }
+
+    @Test
+    void dateDiffDays_invalidDate_returnsError() throws Exception {
+        String body = "{\"operation\":\"date_diff_days\",\"operands\":[\"bad-date\",\"2026-03-12\"]}";
+        mockMvc.perform(post("/api/skills/compute")
+                        .header("X-Agent-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.error").value("invalid date operand: bad-date"));
     }
 
     @Test

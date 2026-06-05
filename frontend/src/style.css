@@ -1,10 +1,50 @@
 @import "tailwindcss";
 
+/*
+ * Chromium 86 does not support `oklch()` / `lab()`. Tailwind v4 defaults use those color spaces.
+ * Pin the default palette to sRGB hex so utilities resolve to legacy-safe values.
+ */
+@theme {
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-orange-500: #f97316;
+  --color-amber-500: #f59e0b;
+  --color-yellow-500: #eab308;
+  --color-green-50: #f0fdf4;
+  --color-green-100: #dcfce7;
+  --color-green-500: #22c55e;
+  --color-green-600: #16a34a;
+  --color-emerald-600: #059669;
+  --color-blue-50: #eff6ff;
+  --color-blue-100: #dbeafe;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+  --color-sky-500: #0ea5e9;
+  --color-indigo-500: #6366f1;
+  --color-violet-500: #8b5cf6;
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-white: #ffffff;
+  --color-black: #000000;
+}
+
 /* Base styles - TDesign provides theme variables */
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -13,5 +53,5 @@ body {
 
 #app {
   width: 100%;
-  height: 100vh;
+  height: 100%;
 }

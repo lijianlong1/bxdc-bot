@@ -100,7 +100,7 @@ fishtank/
 
 ### 4.2 Skill Gateway（技能网关）
 
-**技术栈**：Spring Boot 3.2、Java 17、Spring Security、Spring Data JPA、H2、SSHJ、WebFlux、Lombok
+**技术栈**：Spring Boot 3.2、Java 17、Spring Security、Spring Data JPA、MySQL、SSHJ、WebFlux、Lombok
 
 **职责**：
 - **API 网关**：暴露 REST 接口供 Agent 调用
@@ -119,7 +119,7 @@ fishtank/
 - `ApiProxyService` - HTTP API 代理
 - `AuditAspect` - 审计切面
 
-**数据库**：H2（内存/文件）
+**数据库**：**MySQL**（运行时关系库；JPA `ddl-auto` + `schema.sql` 补充迁移）。配置与参考建表见 `docs/skill-gateway-mysql.md`。
 
 ---
 
@@ -142,9 +142,32 @@ fishtank/
 - `MemoryService`、`coworkMemoryManager`、`coworkMemoryJudge`、`coworkMemoryExtractor` - 记忆系统
 - `SkillManager` - YAML 技能定义管理
 
+**图状态（Graph State）**：
+
+Agent 使用 `createReactAgent` 的 `stateSchema` 扩展了默认 `MessagesAnnotation`，增加了 `tasks_status` 字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `messages` | `BaseMessage[]` | 标准对话消息（由 LangGraph 内置 reducer 管理） |
+| `tasks_status` | `Record<string, TaskState>` | 会话内任务完成状态映射（merge reducer） |
+
+其中 `TaskState = { label: string, status: 'pending' \| 'in_progress' \| 'completed' \| 'cancelled', updatedAt: string }`。
+
+**任务状态流转**：
+1. `preModelHook`：每次 LLM 调用前，从消息历史中的 `manage_tasks` 工具调用重建 `tasks_status`，并将摘要注入到 LLM 输入消息中
+2. `manage_tasks` 工具：LLM 通过该工具注册新任务或更新任务状态
+3. 条件路由：当前依赖 prompt 引导 LLM 跳过已完成任务，无自定义条件边
+
+**关键文件**：
+- `src/agent/tasks-state.ts` - 状态类型定义、Annotation、preModelHook
+- `src/tools/manage-tasks.ts` - 任务管理工具
+- `test/tasks-state.test.cjs` - 任务状态集成测试
+
 **数据库**：SQLite（`memories.db`，用于记忆存储）
 
 **环境变量**：`JAVA_GATEWAY_URL`（默认 `http://localhost:18080`）
+
+**LLM 对接**：经 LangChain `ChatOpenAI` 访问 OpenAI 兼容 Chat Completions；`messages` 使用标准 `role`（`system`、`user`、`assistant`、`tool` 等）。Agent Core 不对出站 HTTP 请求体做 role 改写，上游须为标准兼容实现。可选 `LLM_RAW_HTTP_LOG` 将请求/响应写入 `logs/llmOrg.log`，内容与实际上发报文一致。可选 `LLM_ORG_LOG_REMOTE` 将同等记录经 HTTP 发往 skill-gateway 落库（`llm_http_audit_logs`），**不**经 agent-core 直连数据库。
 
 ---
 
@@ -181,7 +204,7 @@ fishtank/
 | | Spring Security | 认证授权 |
 | | Spring Data JPA | ORM |
 | | SSHJ | SSH 客户端 |
-| | H2 | 数据库 |
+| | MySQL | 数据库 |
 | **Agent** | NestJS 10 | Web 框架 |
 | | LangGraph.js、LangChain.js | Agent 编排 |
 | | OpenAI | LLM |

@@ -1,0 +1,57 @@
+# server-ledger-ui Specification
+
+## Purpose
+TBD - created by archiving change add-user-server-ledger. Update Purpose after archive.
+## Requirements
+### Requirement: 服务器台账入口
+前端 MUST 提供一个明确的“服务器台账”入口按钮，使当前用户可以进入自己的台账管理界面。
+
+#### Scenario: 打开服务器台账
+- **WHEN** 已登录用户点击“服务器台账”按钮
+- **THEN** 系统打开服务器台账视图
+- **AND** 开始加载当前用户的服务器列表
+
+### Requirement: 服务器台账列表展示
+前端 MUST 展示当前用户的服务器台账列表，并清晰显示服务器基础信息。
+
+#### Scenario: 成功展示台账列表
+- **WHEN** 后端成功返回当前用户的服务器台账数据
+- **THEN** 界面展示每条服务器记录
+- **AND** 每条记录至少显示 `ip` 和 `username`
+
+#### Scenario: 空列表展示
+- **WHEN** 当前用户尚未维护任何服务器台账
+- **THEN** 界面展示空状态
+- **AND** 引导用户新增第一条服务器记录
+
+### Requirement: 服务器台账维护表单
+前端 MUST 支持新增、编辑、删除服务器台账记录。
+
+#### Scenario: 新增服务器记录
+- **WHEN** 用户在台账界面提交新的 `ip`、`username`、`password`
+- **THEN** 系统创建新记录
+- **AND** 列表刷新后显示该服务器
+
+#### Scenario: 编辑服务器记录
+- **WHEN** 用户修改已有服务器记录并提交
+- **THEN** 系统保存更新后的内容
+- **AND** 列表中显示最新结果
+
+#### Scenario: 删除服务器记录
+- **WHEN** 用户确认删除某条服务器记录
+- **THEN** 系统删除该记录
+- **AND** 列表中不再展示该服务器
+
+### Requirement: 台账操作错误反馈
+前端 MUST 对台账加载或维护失败提供明确反馈。
+
+#### Scenario: 加载列表失败
+- **WHEN** 服务器台账列表加载失败
+- **THEN** 界面展示错误提示
+- **AND** 用户可以重新发起加载
+
+#### Scenario: 保存失败
+- **WHEN** 用户提交新增或编辑请求但后端返回校验错误
+- **THEN** 界面展示失败原因
+- **AND** 保留用户已输入的表单内容以便修正
+

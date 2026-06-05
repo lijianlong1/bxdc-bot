@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 public class SSHExecutorService {
 
     /**
-     * 在远程服务器上执行命令。
+     * 在远程服务器上执行命令（使用私钥认证）。
      *
      * @param host       远程主机地址
      * @param port       SSH 端口
@@ -35,18 +35,41 @@ public class SSHExecutorService {
             ssh.addHostKeyVerifier(new PromiscuousVerifier());
             ssh.connect(host, port);
             
-            // Load the private key. ssh.loadKeys expects a path, but here we might have content.
-            // For now, we use loadKeys which returns a KeyProvider, satisfying the compiler.
-            // If privateKey is content, this might need adjustment to use a StringReader-based KeyProvider.
             KeyProvider keys = ssh.loadKeys(privateKey, null, null);
             ssh.authPublickey(username, keys);
 
-            try (Session session = ssh.startSession()) {
-                Session.Command cmd = session.exec(command);
-                String output = IOUtils.readFully(cmd.getInputStream()).toString();
-                cmd.join(5, TimeUnit.SECONDS);
-                return output;
-            }
+            return executeSessionCommand(ssh, command);
+        }
+    }
+
+    /**
+     * 在远程服务器上执行命令（使用密码认证）。
+     *
+     * @param host     远程主机地址
+     * @param port     SSH 端口
+     * @param username 用户名
+     * @param password 密码
+     * @param command  要执行的 Shell 命令
+     * @return 命令的标准输出
+     * @throws IOException 如果连接失败或执行出错
+     */
+    public String executeCommandWithPassword(String host, int port, String username, String password, String command) throws IOException {
+        try (SSHClient ssh = new SSHClient()) {
+            ssh.addHostKeyVerifier(new PromiscuousVerifier());
+            ssh.connect(host, port);
+            
+            ssh.authPassword(username, password);
+
+            return executeSessionCommand(ssh, command);
+        }
+    }
+
+    private String executeSessionCommand(SSHClient ssh, String command) throws IOException {
+        try (Session session = ssh.startSession()) {
+            Session.Command cmd = session.exec(command);
+            String output = IOUtils.readFully(cmd.getInputStream()).toString();
+            cmd.join(5, TimeUnit.SECONDS);
+            return output;
         }
     }
 }

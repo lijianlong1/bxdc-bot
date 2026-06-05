@@ -1,8 +1,32 @@
 <script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { useRouter } from 'vue-router';
 import { useUser } from '../composables/useUser';
+import { useSkillHub } from '../composables/useSkillHub';
+import { useServerLedger } from '../composables/useServerLedger';
+import { useAsyncTaskNotifications } from '../composables/useAsyncTaskNotifications';
 import UserAvatar from './UserAvatar.vue';
+import ProfileEditModal from './ProfileEditModal.vue';
+import SkillHub from './SkillHub.vue';
+import ServerLedger from './ServerLedger.vue';
+import TaskNotificationBell from './TaskNotificationBell.vue';
+import { AppIcon, ServerIcon } from 'tdesign-icons-vue-next';
 
+const router = useRouter();
 const { currentUser, logout } = useUser();
+const profileEditVisible = ref(false);
+const { toggleSkillHub } = useSkillHub();
+const { toggleServerLedger } = useServerLedger();
+const { startPolling, stopPolling } = useAsyncTaskNotifications();
+
+onMounted(() => {
+  // 启动异步任务通知 30s 轮询
+  startPolling(30_000);
+});
+
+onBeforeUnmount(() => {
+  stopPolling();
+});
 </script>
 
 <template>
@@ -16,12 +40,29 @@ const { currentUser, logout } = useUser();
         
         <div style="flex: 1"></div>
 
-        <div class="layout-actions" v-if="currentUser">
-          <div class="user-info">
+        <div class="layout-actions">
+          <t-button theme="default" variant="text" @click="toggleServerLedger" v-if="currentUser">
+            <template #icon><ServerIcon /></template>
+            Servers
+          </t-button>
+          <t-button theme="default" variant="text" @click="toggleSkillHub">
+            <template #icon><AppIcon /></template>
+            SkillHub
+          </t-button>
+          <t-button v-if="currentUser" theme="default" variant="text" @click="router.push('/settings')">
+            大模型设置
+          </t-button>
+          <t-button v-if="currentUser" theme="default" variant="text" @click="profileEditVisible = true">
+            编辑资料
+          </t-button>
+
+          <TaskNotificationBell v-if="currentUser" />
+
+          <div class="user-info" v-if="currentUser">
             <UserAvatar :avatar="currentUser.avatar" :size="32" />
             <span class="user-name">{{ currentUser.nickname }}</span>
           </div>
-          <t-button theme="default" variant="text" @click="logout">Switch User</t-button>
+          <t-button v-if="currentUser" theme="default" variant="text" @click="logout">Switch User</t-button>
         </div>
       </div>
     </t-header>
@@ -30,16 +71,23 @@ const { currentUser, logout } = useUser();
         <slot />
       </div>
     </t-content>
+    <SkillHub />
+    <ServerLedger />
+    <ProfileEditModal v-model:visible="profileEditVisible" />
   </t-layout>
 </template>
 
 <style scoped>
 .app-layout {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background-color: var(--td-bg-color-page);
 }
 
 .layout-header {
+  flex-shrink: 0;
   background: transparent;
   padding: 16px 16px 12px;
 }
@@ -94,13 +142,25 @@ const { currentUser, logout } = useUser();
 
 .layout-content {
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
   padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-content :deep(.t-content) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .layout-content-inner {
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
   max-width: 960px;
   width: 100%;
   margin: 0 auto;
