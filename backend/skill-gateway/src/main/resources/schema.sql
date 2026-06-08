@@ -15,8 +15,8 @@ SET @sql = (
   )
 );
 PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+ EXECUTE stmt;
+ DEALLOCATE PREPARE stmt;
 
 UPDATE skills
 SET requires_confirmation = FALSE
@@ -201,3 +201,16 @@ DEALLOCATE PREPARE stmt;
 -- 已废弃表：若库中仍存在则删除（agent_core_invocation_audit_logs、user_skill_invocation_logs）
 DROP TABLE IF EXISTS user_skill_invocation_logs;
 DROP TABLE IF EXISTS agent_core_invocation_audit_logs;
+
+-- skills.schema_properties（持久化计算的 schema 属性，供 Agent 列表接口直接使用）
+SET @sql = (
+  SELECT IF(
+    (SELECT COUNT(*) FROM information_schema.columns
+     WHERE table_schema = @db AND table_name = 'skills' AND column_name = 'schema_properties') > 0,
+    'SELECT 1',
+    'ALTER TABLE skills ADD COLUMN schema_properties TEXT'
+  )
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

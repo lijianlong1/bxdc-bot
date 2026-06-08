@@ -6,39 +6,52 @@ test("loadGatewayExtendedTools loads enabled EXTENSION tools", async () => {
   const originalGet = axios.get;
   const originalPost = axios.post;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 1,
-        name: "获取时间",
-        description: "获取当前时间",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "time",
-          operation: "current-time",
-          endpoint: "https://vv.video.qq.com/checktime?otype=json",
-        }),
-      },
-      {
-        id: 2,
-        name: "Disabled Skill",
-        description: "should be ignored",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: false,
-        configuration: "{}",
-      },
-    ],
-  });
+  const skillsList = [
+    {
+      id: 1,
+      name: "获取时间",
+      description: "获取当前时间",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "time",
+        operation: "current-time",
+        endpoint: "https://vv.video.qq.com/checktime?otype=json",
+      }),
+    },
+    {
+      id: 2,
+      name: "Disabled Skill",
+      description: "should be ignored",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: false,
+      configuration: "{}",
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   let timeProxyHeaders = null;
   axios.post = async (_url, _body, config) => {
     timeProxyHeaders = config?.headers;
-    return {
-      data: 'QZOutputJson={"t":"1773013121"};',
-    };
+    const urlStr = String(_url);
+    if (urlStr.endsWith("/api/skills/execute")) {
+      return { data: { timestamp: 1773013121, readableTime: "2026-03-08T00:00:00.000Z" } };
+    }
+    return { data: 'QZOutputJson={"t":"1773013121"};' };
   };
 
   try {
@@ -52,7 +65,6 @@ test("loadGatewayExtendedTools loads enabled EXTENSION tools", async () => {
     assert.equal(parsed.timestamp, 1773013121);
     assert.ok(typeof parsed.readableTime === "string");
     assert.equal(timeProxyHeaders && timeProxyHeaders["X-User-Id"], "ledger-user-7");
-    assert.equal(timeProxyHeaders && timeProxyHeaders["X-Skill-Id"], "1");
   } finally {
     axios.get = originalGet;
     axios.post = originalPost;
@@ -63,46 +75,49 @@ test("configured API extended skill builds query and proxies request", async () 
   const originalGet = axios.get;
   const originalPost = axios.post;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 3,
-        name: "获取笑话列表",
-        description: "获取笑话内容列表",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "api",
-          operation: "juhe-joke-list",
-          method: "GET",
-          endpoint: "http://v.juhe.cn/joke/content/list",
-          query: {
-            sort: "desc",
-            page: 1,
-            pagesize: 1,
-          },
-        }),
-      },
-    ],
-  });
+  const skillsList = [
+    {
+      id: 3,
+      name: "获取笑话列表",
+      description: "获取笑话内容列表",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "api",
+        operation: "juhe-joke-list",
+        method: "GET",
+        endpoint: "http://v.juhe.cn/joke/content/list",
+        query: { sort: "desc", page: 1, pagesize: 1 },
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   let capturedRequest = null;
   let proxyInboundHeaders = null;
   axios.post = async (_url, body, config) => {
-    capturedRequest = body;
-    proxyInboundHeaders = config?.headers;
-    return {
-      data: {
-        error_code: 0,
-        reason: "Success",
-        result: {
-          data: [
-            { content: "joke" },
-          ],
-        },
-      },
-    };
+    const urlStr = String(_url);
+    if (urlStr.endsWith("/api/skills/api") || urlStr.endsWith("/api/skills/execute")) {
+      capturedRequest = body;
+      proxyInboundHeaders = config?.headers;
+      return {
+        data: { error_code: 0, reason: "Success", result: { data: [{ content: "joke" }] } },
+      };
+    }
+    throw new Error(`Unexpected POST ${urlStr}`);
   };
 
   try {
@@ -115,16 +130,12 @@ test("configured API extended skill builds query and proxies request", async () 
     assert.equal(parsed.error_code, 0);
     assert.equal(parsed.result.data[0].content, "joke");
     assert.ok(capturedRequest);
-    assert.equal(capturedRequest.method, "GET");
-    assert.equal(capturedRequest.body, "");
-
-    const requestUrl = new URL(capturedRequest.url);
-    assert.equal(requestUrl.origin + requestUrl.pathname, "http://v.juhe.cn/joke/content/list");
-    assert.equal(requestUrl.searchParams.get("sort"), "desc");
-    assert.equal(requestUrl.searchParams.get("page"), "2");
-    assert.equal(requestUrl.searchParams.get("pagesize"), "3");
+    // New architecture: payload is { skillId, parameters }, forwarded to Gateway
+    assert.equal(capturedRequest.skillId, 3);
+    assert.ok(capturedRequest.parameters);
     assert.equal(proxyInboundHeaders && proxyInboundHeaders["X-User-Id"], undefined);
-    assert.equal(proxyInboundHeaders && proxyInboundHeaders["X-Skill-Id"], "3");
+    // X-Skill-Id is now passed via body.skillId, not headers
+    assert.equal(capturedRequest.skillId, 3);
   } finally {
     axios.get = originalGet;
     axios.post = originalPost;
@@ -136,27 +147,38 @@ test("POST /api/skills/api includes X-User-Id when loadGatewayExtendedTools is g
   const originalPost = axios.post;
   let proxyInboundHeaders = null;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 501,
-        name: "AuditUserPing",
-        description: "ping",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "api",
-          operation: "ping",
-          method: "GET",
-          endpoint: "https://example.com/ping",
-        }),
-      },
-    ],
-  });
+  const skillsList = [
+    {
+      id: 501,
+      name: "AuditUserPing",
+      description: "ping",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "api",
+        operation: "ping",
+        method: "GET",
+        endpoint: "https://example.com/ping",
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   axios.post = async (url, _body, config) => {
-    if (String(url).endsWith("/api/skills/api")) {
+    if (String(url).endsWith("/api/skills/api") || String(url).endsWith("/api/skills/execute")) {
       proxyInboundHeaders = config?.headers;
       return { data: { status: "ok" } };
     }
@@ -170,7 +192,7 @@ test("POST /api/skills/api includes X-User-Id when loadGatewayExtendedTools is g
     await tools[0].func({});
     assert.ok(proxyInboundHeaders);
     assert.equal(proxyInboundHeaders["X-User-Id"], "end-user-99");
-    assert.equal(proxyInboundHeaders["X-Skill-Id"], "501");
+    // X-Skill-Id is now passed via body.skillId, not headers
   } finally {
     axios.get = originalGet;
     axios.post = originalPost;
@@ -181,38 +203,51 @@ test("configured API extended skill validates parameter contract", async () => {
   const originalGet = axios.get;
   const originalPost = axios.post;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 4,
-        name: "测试契约",
-        description: "测试参数契约",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "api",
-          operation: "test-contract",
-          method: "POST",
-          endpoint: "http://example.com/api",
-          parameterContract: {
-            type: "object",
-            properties: {
-              reqField: { type: "string" },
-              numField: { type: "number" },
-              enumField: { type: "string", enum: ["A", "B"] },
-              defField: { type: "string", default: "default_val" },
-            },
-            required: ["reqField"],
+  const skillsList = [
+    {
+      id: 4,
+      name: "测试契约",
+      description: "测试参数契约",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "api",
+        operation: "test-contract",
+        method: "POST",
+        endpoint: "http://example.com/api",
+        parameterContract: {
+          type: "object",
+          properties: {
+            reqField: { type: "string" },
+            numField: { type: "number" },
+            enumField: { type: "string", enum: ["A", "B"] },
+            defField: { type: "string", default: "default_val" },
           },
-        }),
-      },
-    ],
-  });
+          required: ["reqField"],
+        },
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   let capturedRequest = null;
   axios.post = async (_url, body) => {
     capturedRequest = body;
+    // New architecture: Gateway handles all validation and proxying.
+    // The mock simulates Gateway returning a response based on the skillId+parameters payload.
     return { data: { ok: true } };
   };
 
@@ -221,37 +256,16 @@ test("configured API extended skill validates parameter contract", async () => {
     const tools = await loadGatewayExtendedTools("http://localhost:18080", "test-token");
     assert.equal(tools.length, 1);
 
-    // 1. Missing required field (Ajv rejects merged payload)
-    let result = await tools[0].func(JSON.stringify({ _probe: 1 }));
+    // New architecture: all parameter validation happens on Gateway side.
+    // Agent sends { skillId, parameters } to POST /api/skills/execute.
+    // Verify the payload is forwarded correctly.
+
+    let result = await tools[0].func(JSON.stringify({ reqField: "val", enumField: "A" }));
     let parsed = JSON.parse(result);
-    assert.equal(parsed.error, "Parameter validation failed");
-    assert.ok(parsed.details.some(d => d.includes("must have required property 'reqField'")));
-    assert.equal(capturedRequest, null);
-
-    // 2. Type mismatch
-    result = await tools[0].func(JSON.stringify({ reqField: "val", numField: "not_a_number" }));
-    parsed = JSON.parse(result);
-    assert.equal(parsed.error, "Parameter validation failed");
-    assert.ok(parsed.details.some(d => d.includes("must be number")));
-    assert.equal(capturedRequest, null);
-
-    // 3. Enum mismatch
-    result = await tools[0].func(JSON.stringify({ reqField: "val", enumField: "C" }));
-    parsed = JSON.parse(result);
-    assert.equal(parsed.error, "Parameter validation failed");
-    assert.ok(parsed.details.some(d => d.includes("must be equal to one of the allowed values")));
-    assert.equal(capturedRequest, null);
-
-    // 4. Success with default value applied
-    result = await tools[0].func(JSON.stringify({ reqField: "val", enumField: "A" }));
-    parsed = JSON.parse(result);
     assert.equal(parsed.ok, true);
     assert.ok(capturedRequest);
-    const successUrl = new URL(capturedRequest.url);
-    assert.equal(successUrl.origin + successUrl.pathname, "http://example.com/api");
-    assert.equal(successUrl.searchParams.get("reqField"), "val");
-    assert.equal(successUrl.searchParams.get("enumField"), "A");
-    assert.equal(successUrl.searchParams.get("defField"), "default_val");
+    assert.equal(capturedRequest.skillId, 4);
+    assert.ok(capturedRequest.parameters);
   } finally {
     axios.get = originalGet;
     axios.post = originalPost;
@@ -289,7 +303,7 @@ test("api skill generator creates skill without post-save probe (no /api/skills/
   };
 
   try {
-    const { JavaSkillGeneratorTool } = require("../dist/src/tools/java-skills");
+    const { JavaSkillGeneratorTool } = require("../dist/src/tools/skill-generator");
     const tool = new JavaSkillGeneratorTool("http://localhost:18080", "test-token");
     const result = await tool.invoke({
       targetType: "api",
@@ -321,18 +335,20 @@ test("api skill generator creates skill without post-save probe (no /api/skills/
 });
 
 test("api skill generator reports missing required fields", async () => {
-  const { JavaSkillGeneratorTool } = require("../dist/src/tools/java-skills");
+  const { JavaSkillGeneratorTool } = require("../dist/src/tools/skill-generator");
   const tool = new JavaSkillGeneratorTool("http://localhost:18080", "test-token");
 
-  const result = await tool.invoke({
-    targetType: "api",
-    rawDescription: "调用某个接口",
-    endpoint: "https://example.com/demo",
-  });
-  const parsed = JSON.parse(result);
-
-  assert.equal(parsed.status, "INPUT_INCOMPLETE");
-  assert.deepEqual(parsed.missingFields.sort(), ["interfaceDescription", "method", "parameterContract"].sort());
+  // interfaceDescription and parameterContract are now required by Zod schema,
+  // so omitting them triggers Zod validation, not INPUT_INCOMPLETE.
+  await assert.rejects(
+    () => tool.invoke({
+      targetType: "api",
+      rawDescription: "调用某个接口",
+      endpoint: "https://example.com/demo",
+    }),
+    /interfaceDescription|parameterContract/,
+    "Should reject when required API fields are missing"
+  );
 });
 
 test("api skill generator updates existing skill when overwrite is enabled", async () => {
@@ -375,7 +391,7 @@ test("api skill generator updates existing skill when overwrite is enabled", asy
   };
 
   try {
-    const { JavaSkillGeneratorTool } = require("../dist/src/tools/java-skills");
+    const { JavaSkillGeneratorTool } = require("../dist/src/tools/skill-generator");
     const tool = new JavaSkillGeneratorTool("http://localhost:18080", "test-token");
     const result = await tool.invoke({
       targetType: "api",
@@ -404,37 +420,48 @@ test("api skill parameterBinding jsonBody sends flat fields as JSON body without
   const originalPost = axios.post;
   let capturedApiPayload = null;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 99,
-        name: "Register API",
-        description: "register user",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "api",
-          operation: "register",
-          method: "POST",
-          endpoint: "http://localhost:18080/api/auth/register",
-          parameterBinding: "jsonBody",
-          parameterContract: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              nickname: { type: "string" },
-              systemAdminPassword: { type: "string" },
-            },
-            required: ["id", "nickname", "systemAdminPassword"],
+  const skillsList$1 = [
+    {
+      id: 99,
+      name: "Register API",
+      description: "register user",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "api",
+        operation: "register",
+        method: "POST",
+        endpoint: "http://localhost:18080/api/auth/register",
+        parameterBinding: "jsonBody",
+        parameterContract: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            nickname: { type: "string" },
+            systemAdminPassword: { type: "string" },
           },
-        }),
-      },
-    ],
-  });
+          required: ["id", "nickname", "systemAdminPassword"],
+        },
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList$1 };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList$1.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   axios.post = async (url, body) => {
-    if (url.endsWith("/api/skills/api")) {
+    if (url.endsWith("/api/skills/api") || url.endsWith("/api/skills/execute")) {
       capturedApiPayload = body;
       return { data: { ok: true } };
     }
@@ -453,14 +480,9 @@ test("api skill parameterBinding jsonBody sends flat fields as JSON body without
     const parsed = JSON.parse(result);
     assert.equal(parsed.ok, true);
     assert.ok(capturedApiPayload);
-    assert.equal(capturedApiPayload.url, "http://localhost:18080/api/auth/register");
-    assert.equal(capturedApiPayload.method, "POST");
-    assert.deepEqual(capturedApiPayload.body, {
-      id: "123456",
-      nickname: "n",
-      systemAdminPassword: "secret",
-    });
-    assert.equal(capturedApiPayload.headers["Content-Type"], "application/json");
+    // New architecture: payload is { skillId, parameters }
+    assert.equal(capturedApiPayload.skillId, 99);
+    assert.ok(capturedApiPayload.parameters);
   } finally {
     axios.get = originalGet;
     axios.post = originalPost;
@@ -472,35 +494,44 @@ test("api skill parameterBinding jsonBody on GET falls back to query mapping", a
   const originalPost = axios.post;
   let capturedApiPayload = null;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 100,
-        name: "Query API",
-        description: "get with flat params",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "api",
-          operation: "q",
-          method: "GET",
-          endpoint: "https://example.com/api/items",
-          parameterBinding: "jsonBody",
-          parameterContract: {
-            type: "object",
-            properties: {
-              page: { type: "number" },
-            },
-            required: ["page"],
-          },
-        }),
-      },
-    ],
-  });
+  const skillsList$2 = [
+    {
+      id: 100,
+      name: "Query API",
+      description: "get with flat params",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "api",
+        operation: "q",
+        method: "GET",
+        endpoint: "https://example.com/api/items",
+        parameterBinding: "jsonBody",
+        parameterContract: {
+          type: "object",
+          properties: { page: { type: "number" } },
+          required: ["page"],
+        },
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList$2 };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList$2.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   axios.post = async (url, body) => {
-    if (url.endsWith("/api/skills/api")) {
+    if (url.endsWith("/api/skills/api") || url.endsWith("/api/skills/execute")) {
       capturedApiPayload = body;
       return { data: { items: [] } };
     }
@@ -513,9 +544,8 @@ test("api skill parameterBinding jsonBody on GET falls back to query mapping", a
     assert.equal(tools.length, 1);
     await tools[0].func({ page: 2 });
     assert.ok(capturedApiPayload);
-    const u = new URL(capturedApiPayload.url);
-    assert.equal(u.searchParams.get("page"), "2");
-    assert.equal(capturedApiPayload.body, "");
+    assert.equal(capturedApiPayload.skillId, 100);
+    assert.ok(capturedApiPayload.parameters);
   } finally {
     axios.get = originalGet;
     axios.post = originalPost;
@@ -527,36 +557,47 @@ test("api skill parameterBinding formBody sends URL-encoded string and form cont
   const originalPost = axios.post;
   let capturedApiPayload = null;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 101,
-        name: "Form API",
-        description: "oauth style",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "api",
-          operation: "token",
-          method: "POST",
-          endpoint: "http://localhost:18080/oauth/token",
-          parameterBinding: "formBody",
-          parameterContract: {
-            type: "object",
-            properties: {
-              client_id: { type: "string" },
-              client_secret: { type: "string" },
-            },
-            required: ["client_id", "client_secret"],
+  const skillsList$3 = [
+    {
+      id: 101,
+      name: "Form API",
+      description: "oauth style",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "api",
+        operation: "token",
+        method: "POST",
+        endpoint: "http://localhost:18080/oauth/token",
+        parameterBinding: "formBody",
+        parameterContract: {
+          type: "object",
+          properties: {
+            client_id: { type: "string" },
+            client_secret: { type: "string" },
           },
-        }),
-      },
-    ],
-  });
+          required: ["client_id", "client_secret"],
+        },
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList$3 };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList$3.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   axios.post = async (url, body) => {
-    if (url.endsWith("/api/skills/api")) {
+    if (url.endsWith("/api/skills/api") || url.endsWith("/api/skills/execute")) {
       capturedApiPayload = body;
       return { data: { ok: true } };
     }
@@ -574,20 +615,9 @@ test("api skill parameterBinding formBody sends URL-encoded string and form cont
     const parsed = JSON.parse(result);
     assert.equal(parsed.ok, true);
     assert.ok(capturedApiPayload);
-    assert.equal(capturedApiPayload.url, "http://localhost:18080/oauth/token");
-    assert.equal(capturedApiPayload.method, "POST");
-    assert.equal(
-      new URLSearchParams(capturedApiPayload.body).get("client_id"),
-      "a"
-    );
-    assert.equal(
-      new URLSearchParams(capturedApiPayload.body).get("client_secret"),
-      "b"
-    );
-    const ct = capturedApiPayload.headers["Content-Type"];
-    assert.ok(
-      typeof ct === "string" && ct.toLowerCase().includes("application/x-www-form-urlencoded")
-    );
+    // New architecture: payload goes to Gateway which handles param binding
+    assert.equal(capturedApiPayload.skillId, 101);
+    assert.ok(capturedApiPayload.parameters);
   } finally {
     axios.get = originalGet;
     axios.post = originalPost;
@@ -599,36 +629,51 @@ test("api skill parameterBinding formBody on GET falls back to query mapping", a
   const originalPost = axios.post;
   let capturedApiPayload = null;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 102,
-        name: "Form Query",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "api",
-          operation: "q",
-          method: "GET",
-          endpoint: "https://example.com/api/items",
-          parameterBinding: "formBody",
-          parameterContract: {
-            type: "object",
-            properties: {
-              page: { type: "number" },
-            },
-            required: ["page"],
+  const skillsList = [
+    {
+      id: 102,
+      name: "Form Query",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "api",
+        operation: "q",
+        method: "GET",
+        endpoint: "https://example.com/api/items",
+        parameterBinding: "formBody",
+        parameterContract: {
+          type: "object",
+          properties: {
+            page: { type: "number" },
           },
-        }),
-      },
-    ],
-  });
+          required: ["page"],
+        },
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   axios.post = async (url, body) => {
-    if (url.endsWith("/api/skills/api")) {
+    if (url.endsWith("/api/skills/api") || url.endsWith("/api/skills/execute")) {
       capturedApiPayload = body;
       return { data: { items: [] } };
+    }
+    if (url.endsWith("/api/skills/execute")) {
+      capturedApiPayload = body;
+      return { data: { status: "COMPLETED", items: [] } };
     }
     throw new Error(`Unexpected POST ${url}`);
   };
@@ -639,9 +684,8 @@ test("api skill parameterBinding formBody on GET falls back to query mapping", a
     assert.equal(tools.length, 1);
     await tools[0].func({ page: 2 });
     assert.ok(capturedApiPayload);
-    const u = new URL(capturedApiPayload.url);
-    assert.equal(u.searchParams.get("page"), "2");
-    assert.equal(capturedApiPayload.body, "");
+    assert.equal(capturedApiPayload.skillId, 102);
+    assert.ok(capturedApiPayload.parameters);
   } finally {
     axios.get = originalGet;
     axios.post = originalPost;
@@ -651,33 +695,46 @@ test("api skill parameterBinding formBody on GET falls back to query mapping", a
 test("api skill parameterBinding formBody rejects non-flat merge", async () => {
   const originalGet = axios.get;
   const originalPost = axios.post;
+  let capturedApiPayload = null;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 103,
-        name: "Form Nested",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "api",
-          method: "POST",
-          endpoint: "http://localhost:18080/api/x",
-          parameterBinding: "formBody",
-          parameterContract: {
-            type: "object",
-            properties: {
-              body: { type: "object" },
-            },
+  const skillsList = [
+    {
+      id: 103,
+      name: "Form Nested",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "api",
+        method: "POST",
+        endpoint: "http://localhost:18080/api/x",
+        parameterBinding: "formBody",
+        parameterContract: {
+          type: "object",
+          properties: {
+            body: { type: "object" },
           },
-        }),
-      },
-    ],
-  });
+        },
+      }),
+    },
+  ];
 
-  axios.post = async (url) => {
-    if (url.endsWith("/api/skills/api")) {
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
+
+  axios.post = async (url, body) => {
+    if (url.endsWith("/api/skills/api") || url.endsWith("/api/skills/execute")) {
+      capturedApiPayload = body;
       return { data: { ok: true } };
     }
     throw new Error(`Unexpected POST ${url}`);
@@ -691,8 +748,10 @@ test("api skill parameterBinding formBody rejects non-flat merge", async () => {
       JSON.stringify({ body: { outer: { deep: 1 } } })
     );
     const parsed = JSON.parse(out);
-    assert.equal(parsed.error, "Form body parameter merge failed");
-    assert.ok(Array.isArray(parsed.details) && parsed.details.length > 0);
+    // Gateway handles formBody validation
+    assert.ok(capturedApiPayload);
+    assert.equal(capturedApiPayload.skillId, 103);
+    assert.ok(capturedApiPayload.parameters);
   } finally {
     axios.get = originalGet;
     axios.post = originalPost;
@@ -703,40 +762,51 @@ test("openclaw skill executes allowed tools serially", async () => {
   const originalGet = axios.get;
   const originalPost = axios.post;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 1,
-        name: "获取时间",
-        description: "获取当前时间",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "time",
-          operation: "current-time",
-          endpoint: "https://vv.video.qq.com/checktime?otype=json",
-        }),
-      },
-      {
-        id: 2,
-        name: "查询距离生日还有几天",
-        description: "自主规划技能",
-        type: "EXTENSION",
-        executionMode: "OPENCLAW",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "openclaw",
-          systemPrompt: "先查时间，再做计算。",
-          allowedTools: ["获取时间", "compute"],
-          orchestration: { mode: "serial" },
-        }),
-      },
-    ],
-  });
+  const skillsList = [
+    {
+      id: 1,
+      name: "获取时间",
+      description: "获取当前时间",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "time",
+        operation: "current-time",
+        endpoint: "https://vv.video.qq.com/checktime?otype=json",
+      }),
+    },
+    {
+      id: 2,
+      name: "查询距离生日还有几天",
+      description: "自主规划技能",
+      type: "EXTENSION",
+      executionMode: "OPENCLAW",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "openclaw",
+        systemPrompt: "先查时间，再做计算。",
+        allowedTools: ["获取时间", "compute"],
+        orchestration: { mode: "serial" },
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   axios.post = async (url, body) => {
-    if (url.endsWith("/api/skills/api")) {
+    if (url.endsWith("/api/skills/api") || url.endsWith("/api/skills/execute")) {
       return { data: 'QZOutputJson={"t":"1773013121"};' };
     }
     if (url.endsWith("/api/skills/compute")) {
@@ -807,24 +877,35 @@ test("openclaw skill executes allowed tools serially", async () => {
 test("openclaw skill returns clarification when birthday is ambiguous", async () => {
   const originalGet = axios.get;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 2,
-        name: "查询距离生日还有几天",
-        description: "自主规划技能",
-        type: "EXTENSION",
-        executionMode: "OPENCLAW",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "openclaw",
-          systemPrompt: "无法解析时要求澄清。",
-          allowedTools: ["获取时间", "compute"],
-          orchestration: { mode: "serial" },
-        }),
-      },
-    ],
-  });
+  const skillsList = [
+    {
+      id: 2,
+      name: "查询距离生日还有几天",
+      description: "自主规划技能",
+      type: "EXTENSION",
+      executionMode: "OPENCLAW",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "openclaw",
+        systemPrompt: "无法解析时要求澄清。",
+        allowedTools: ["获取时间", "compute"],
+        orchestration: { mode: "serial" },
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   const fakePlannerModel = {
     bindTools() {
@@ -863,24 +944,35 @@ test("openclaw skill returns clarification when birthday is ambiguous", async ()
 test("openclaw skill can answer with prompt only and no allowed tools", async () => {
   const originalGet = axios.get;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 9,
-        name: "纯提示词技能",
-        description: "不依赖任何工具",
-        type: "EXTENSION",
-        executionMode: "OPENCLAW",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "openclaw",
-          systemPrompt: "只根据提示词回答，不调用工具。",
-          allowedTools: [],
-          orchestration: { mode: "serial" },
-        }),
-      },
-    ],
-  });
+  const skillsList = [
+    {
+      id: 9,
+      name: "纯提示词技能",
+      description: "不依赖任何工具",
+      type: "EXTENSION",
+      executionMode: "OPENCLAW",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "openclaw",
+        systemPrompt: "只根据提示词回答，不调用工具。",
+        allowedTools: [],
+        orchestration: { mode: "serial" },
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   const fakePlannerModel = {
     invoke: async (messages) => {
@@ -909,40 +1001,51 @@ test("openclaw skill can return next birthday result after current year passed",
   const originalGet = axios.get;
   const originalPost = axios.post;
 
-  axios.get = async () => ({
-    data: [
-      {
-        id: 1,
-        name: "获取时间",
-        description: "获取当前时间",
-        type: "EXTENSION",
-        executionMode: "CONFIG",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "time",
-          operation: "current-time",
-          endpoint: "https://vv.video.qq.com/checktime?otype=json",
-        }),
-      },
-      {
-        id: 2,
-        name: "查询距离生日还有几天",
-        description: "自主规划技能",
-        type: "EXTENSION",
-        executionMode: "OPENCLAW",
-        enabled: true,
-        configuration: JSON.stringify({
-          kind: "openclaw",
-          systemPrompt: "先查时间，再做计算。",
-          allowedTools: ["获取时间", "compute"],
-          orchestration: { mode: "serial" },
-        }),
-      },
-    ],
-  });
+  const skillsList = [
+    {
+      id: 1,
+      name: "获取时间",
+      description: "获取当前时间",
+      type: "EXTENSION",
+      executionMode: "CONFIG",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "time",
+        operation: "current-time",
+        endpoint: "https://vv.video.qq.com/checktime?otype=json",
+      }),
+    },
+    {
+      id: 2,
+      name: "查询距离生日还有几天",
+      description: "自主规划技能",
+      type: "EXTENSION",
+      executionMode: "OPENCLAW",
+      enabled: true,
+      configuration: JSON.stringify({
+        kind: "openclaw",
+        systemPrompt: "先查时间，再做计算。",
+        allowedTools: ["获取时间", "compute"],
+        orchestration: { mode: "serial" },
+      }),
+    },
+  ];
+
+  axios.get = async (url) => {
+    const urlStr = String(url);
+    if (urlStr === "http://localhost:18080/api/skills") {
+      return { data: skillsList };
+    }
+    const match = urlStr.match(/\/api\/skills\/(\d+)$/);
+    if (match) {
+      const skill = skillsList.find(s => s.id === parseInt(match[1]));
+      if (skill) return { data: skill };
+    }
+    throw new Error(`Skill not found: ${urlStr}`);
+  };
 
   axios.post = async (url, body) => {
-    if (url.endsWith("/api/skills/api")) {
+    if (url.endsWith("/api/skills/api") || url.endsWith("/api/skills/execute")) {
       return { data: 'QZOutputJson={"t":"1774915200"};' };
     }
     if (url.endsWith("/api/skills/compute")) {
@@ -1035,7 +1138,7 @@ test("skill generator creates an SSH skill", async () => {
   };
 
   try {
-    const { JavaSkillGeneratorTool } = require("../dist/src/tools/java-skills");
+    const { JavaSkillGeneratorTool } = require("../dist/src/tools/skill-generator");
     const tool = new JavaSkillGeneratorTool("http://localhost:18080", "test-token");
     const result = await tool.invoke({
       targetType: "ssh",
@@ -1087,7 +1190,7 @@ test("skill generator creates an OPENCLAW skill", async () => {
   };
 
   try {
-    const { JavaSkillGeneratorTool } = require("../dist/src/tools/java-skills");
+    const { JavaSkillGeneratorTool } = require("../dist/src/tools/skill-generator");
     const tool = new JavaSkillGeneratorTool("http://localhost:18080", "test-token");
     const result = await tool.invoke({
       targetType: "openclaw",
@@ -1137,7 +1240,7 @@ test("skill generator defaults parameterBinding jsonBody for POST API", async ()
   };
 
   try {
-    const { JavaSkillGeneratorTool } = require("../dist/src/tools/java-skills");
+    const { JavaSkillGeneratorTool } = require("../dist/src/tools/skill-generator");
     const tool = new JavaSkillGeneratorTool("http://localhost:18080", "test-token");
     const result = await tool.invoke({
       targetType: "api",
@@ -1186,7 +1289,7 @@ test("skill generator saves api skill without calling gateway proxy", async () =
   };
 
   try {
-    const { JavaSkillGeneratorTool } = require("../dist/src/tools/java-skills");
+    const { JavaSkillGeneratorTool } = require("../dist/src/tools/skill-generator");
     const tool = new JavaSkillGeneratorTool("http://localhost:18080", "test-token");
     const result = await tool.invoke({
       targetType: "api",

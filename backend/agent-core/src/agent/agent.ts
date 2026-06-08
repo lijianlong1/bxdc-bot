@@ -15,17 +15,13 @@
  * 5. 配置共享的 MemorySaver 用于状态持久化
  * 
  * 工具说明：
- * - JavaSshTool: SSH 远程执行工具
- * - （暂停默认注册）`JavaApiTool` / `api_caller`：见 createAgent 内块注释；类仍保留在 `java-skills.ts`
- * - JavaSkillGeneratorTool: 技能生成工具
+ * - JavaSkillGeneratorTool（来自 skill-generator.ts）: 技能生成工具
  * - JavaComputeTool: 数学计算工具
- * - JavaLinuxScriptTool: Linux 脚本执行工具
  * - JavaServerLookupTool: 服务器信息查询工具
- * - GatewayExtendedTools: 从 Skill Gateway 动态加载的扩展技能
+ * - GatewayExtendedTools: 从 Skill Gateway 动态加载的扩展技能（含 SSH Extension Skill）
  * - ManageTasksTool: 任务状态管理工具
  * 
  * 环境变量：
- * - AGENT_EXPOSE_SSH_EXECUTOR: 是否暴露 SSH 执行器（默认关闭，需要用户认证或显式开启）
  * - AGENT_BUILTIN_SKILL_DISPATCH: 内置技能路由模式（legacy/gateway）
  * 
  * @module AgentFactory
@@ -39,15 +35,13 @@ import { ChatOpenAI } from "@langchain/openai";
 import type { ClientOptions } from "openai";
 import { composeOpenAiCompatibleFetch } from "../utils/llm-request-role-normalize";
 import {
-  JavaSshTool,
-  JavaSkillGeneratorTool,
   JavaComputeTool,
-  JavaLinuxScriptTool,
   JavaServerLookupTool,
   loadGatewayExtendedTools,
   getAgentBuiltinSkillDispatch,
   type BindableAgentTool,
 } from "../tools/java-skills";
+import { JavaSkillGeneratorTool } from "../tools/skill-generator";
 import { ManageTasksTool } from "../tools/manage-tasks";
 import { AgentAnnotation, preModelHook } from "./tasks-state";
 import type { SkillManager } from "../skills/skill.manager";
@@ -145,30 +139,14 @@ export class AgentFactory {
       streaming: agentStreaming, // 流式输出开关
     });
 
-    // 判断是否暴露 SSH 执行器
-    // 条件：用户未登录 或 环境变量显式开启
-    const exposeSshExecutor =
-      !userId?.trim()
-      || process.env.AGENT_EXPOSE_SSH_EXECUTOR === "1"
-      || process.env.AGENT_EXPOSE_SSH_EXECUTOR === "true";
-    
     // 获取内置技能路由模式
     const builtinDispatch = getAgentBuiltinSkillDispatch();
     
     // 构建基础工具数组
+    // SSH 操作统一通过 SSH Extension Skill（kind: "ssh"）执行，不再注册 ssh_executor / linux_script_executor
     const baseTools: BindableAgentTool[] = [
-      ...(exposeSshExecutor
-        ? [new JavaSshTool(gatewayUrl, apiToken, userId, { dispatch: builtinDispatch })]
-        : []),
-      /* 暂停默认注册（2026-04）：built-in `api_caller`（`JavaApiTool`）暂不挂入本列表。
-       * 扩展类 API Skill 在 `loadGatewayExtendedTools` 中注册，执行时走
-       * `executeConfiguredApiSkill` → `POST {gateway}/api/skills/api`，**不是** 在 ReAct
-       * 里再调用名为 `api_caller` 的内置工具。`AGENT_BUILTIN_SKILL_DISPATCH` 只影响**已注册**的
-       * 内置 `JavaApiTool`/`JavaSshTool`/`JavaComputeTool` 的出站端点，与扩展 API 无嵌套关系。
-       * `JavaApiTool` 类仍保留在 `../tools/java-skills.ts`，供单测、调试或将来按配置恢复。 */
       new JavaSkillGeneratorTool(gatewayUrl, apiToken, userId),
       new JavaComputeTool(gatewayUrl, apiToken, { dispatch: builtinDispatch }),
-      new JavaLinuxScriptTool(gatewayUrl, apiToken, userId),
       new JavaServerLookupTool(gatewayUrl, apiToken, userId),
     ];
     
@@ -176,6 +154,7 @@ export class AgentFactory {
     const gatewayExtendedTools = await loadGatewayExtendedTools(gatewayUrl, apiToken, userId, {
       plannerModel: model,
       availableTools: baseTools,
+      sessionId: config?.sessionId,
     });
     
     // 合并所有工具

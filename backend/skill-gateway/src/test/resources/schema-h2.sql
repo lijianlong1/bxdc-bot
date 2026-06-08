@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS skills (
     avatar VARCHAR(32),
     created_by VARCHAR(128),
     created_at TIMESTAMP,
-    updated_at TIMESTAMP
+    updated_at TIMESTAMP,
+    schema_properties TEXT
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (

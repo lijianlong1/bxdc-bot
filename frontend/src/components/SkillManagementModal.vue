@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch, nextTick } from 'vue';
 import { AddIcon, DeleteIcon, EditIcon } from 'tdesign-icons-vue-next';
 import { MessagePlugin } from 'tdesign-vue-next';
 import TextOptimizeModal from './TextOptimizeModal.vue';
+import ConfigFormRenderer from './ConfigFormRenderer.vue';
+import type { ConfigSchema } from './ConfigFormRenderer.vue';
 import {
   BUILT_IN_SKILLS,
   type Skill,
@@ -12,20 +14,21 @@ import {
   canManageGatewaySkill,
 } from '../composables/useSkillHub';
 import { useUser } from '../composables/useUser';
+import { apiUrl } from '../services/config';
 import {
   createDefaultSkillDraft,
-  getConfigKindOptions,
   isApiDraft,
   isSshDraft,
   isTemplateDraft,
   isOpenClawDraft,
-  getPresetLabel,
   parseSkillDraft,
   serializeSkillDraft,
-  DEFAULT_ASYNC_POLL_TEMPLATE,
   type ConfigKind,
   type ExecutionMode,
   type SkillConfigDraft,
+  type ApiConfigDraft,
+  type SshConfigDraft,
+  type TemplateConfigDraft,
 } from '../utils/skillEditor';
 
 const {
@@ -54,6 +57,116 @@ const parseError = ref<string | null>(null);
 const rawConfiguration = ref('{}');
 const configDraft = ref<SkillConfigDraft>(createDefaultSkillDraft('CONFIG'));
 
+interface ExecutionType {
+  type: string;
+  label: string;
+  configSchema: ConfigSchema;
+}
+
+const executionTypes = ref<ExecutionType[]>([]);
+
+const configFormValues = ref<Record<string, unknown>>({});
+const syncingFromDraft = ref(false);
+
+function fetchExecutionTypes() {
+  fetch(apiUrl('/api/system-skills/execution-types'))
+    .then(res => res.json())
+    .then(data => { executionTypes.value = Array.isArray(data) ? data : []; })
+    .catch(() => { executionTypes.value = []; });
+}
+
+function draftToFormValues(draft: SkillConfigDraft): Record<string, unknown> {
+  if (isApiDraft(draft)) {
+    const headers = draft.headersText.trim() ? (() => { try { return JSON.parse(draft.headersText); } catch { return {}; } })() : undefined;
+    const query = draft.queryText.trim() ? (() => { try { return JSON.parse(draft.queryText); } catch { return {}; } })() : undefined;
+    const body = draft.bodyText.trim() ? (() => { try { return JSON.parse(draft.bodyText); } catch { return {}; } })() : undefined;
+    const pc = draft.parameterContractText.trim() ? (() => { try { return JSON.parse(draft.parameterContractText); } catch { return {}; } })() : undefined;
+    const asyncPollVal = draft.asyncPollText.trim() ? (() => { try { return JSON.parse(draft.asyncPollText); } catch { return {}; } })() : undefined;
+    return {
+      preset: draft.preset,
+      operation: draft.operation,
+      method: draft.method,
+      endpoint: draft.endpoint,
+      parameterBinding: draft.parameterBinding,
+      responseTimestampField: draft.responseTimestampField,
+      timeoutSeconds: draft.timeoutSeconds,
+      headers,
+      query,
+      body,
+      interfaceDescription: draft.interfaceDescription,
+      parameterContract: pc,
+      asyncPoll: asyncPollVal,
+    };
+  }
+  if (isSshDraft(draft)) {
+    return {
+      preset: '服务器状态巡检',
+      operation: draft.operation,
+      lookup: draft.lookup,
+      executor: draft.executor,
+      command: draft.command,
+      interfaceDescription: draft.interfaceDescription,
+    };
+  }
+  if (isTemplateDraft(draft)) {
+    return {
+      prompt: draft.prompt,
+    };
+  }
+  return {};
+}
+
+function updateDraftFromFormValues(values: Record<string, unknown>) {
+   if (isApiDraft(configDraft.value)) {
+     const d = configDraft.value as ApiConfigDraft;
+     d.preset = (values.preset as ApiConfigDraft['preset']) ?? d.preset;
+     d.operation = (values.operation as string) ?? d.operation;
+     d.method = (values.method as string) ?? d.method;
+     d.endpoint = (values.endpoint as string) ?? d.endpoint;
+     d.parameterBinding = (values.parameterBinding as ApiConfigDraft['parameterBinding']) ?? d.parameterBinding;
+     d.responseTimestampField = (values.responseTimestampField as string) ?? d.responseTimestampField;
+    d.timeoutSeconds = typeof values.timeoutSeconds === 'number' ? values.timeoutSeconds : d.timeoutSeconds;
+    d.interfaceDescription = (values.interfaceDescription as string) ?? d.interfaceDescription;
+    d.headersText = values.headers && typeof values.headers === 'object' ? JSON.stringify(values.headers, null, 2) : (typeof values.headers === 'string' ? values.headers : d.headersText);
+    d.queryText = values.query && typeof values.query === 'object' ? JSON.stringify(values.query, null, 2) : (typeof values.query === 'string' ? values.query : d.queryText);
+    d.bodyText = values.body && typeof values.body === 'object' ? JSON.stringify(values.body, null, 2) : (typeof values.body === 'string' ? values.body : d.bodyText);
+    d.parameterContractText = values.parameterContract && typeof values.parameterContract === 'object' ? JSON.stringify(values.parameterContract, null, 2) : (typeof values.parameterContract === 'string' ? values.parameterContract : d.parameterContractText);
+    d.asyncPollEnabled = values.asyncPoll !== undefined && values.asyncPoll !== null;
+    if (values.asyncPoll !== undefined && values.asyncPoll !== null) {
+      d.asyncPollText = typeof values.asyncPoll === 'object' ? JSON.stringify(values.asyncPoll, null, 2) : String(values.asyncPoll);
+    }
+  } else if (isSshDraft(configDraft.value)) {
+    const d = configDraft.value as SshConfigDraft;
+    d.operation = (values.operation as string) ?? d.operation;
+    d.lookup = (values.lookup as string) ?? d.lookup;
+    d.executor = (values.executor as string) ?? d.executor;
+    d.command = (values.command as string) ?? d.command;
+    d.interfaceDescription = (values.interfaceDescription as string) ?? d.interfaceDescription;
+  } else if (isTemplateDraft(configDraft.value)) {
+    const d = configDraft.value as TemplateConfigDraft;
+    d.prompt = (values.prompt as string) ?? d.prompt;
+  }
+}
+
+function syncDraftToConfigForm() {
+  syncingFromDraft.value = true;
+  configFormValues.value = draftToFormValues(configDraft.value);
+  nextTick(() => { syncingFromDraft.value = false; });
+}
+
+watch(configFormValues, (val) => {
+  if (syncingFromDraft.value) return;
+  updateDraftFromFormValues(val);
+}, { deep: true });
+
+const currentExecutionType = computed(() => {
+  return executionTypes.value.find(t => t.type === currentConfigKind.value) ?? null;
+});
+
+const currentConfigSchema = computed<ConfigSchema | null>(() => {
+  return currentExecutionType.value?.configSchema ?? null;
+});
+
 const optimizeVisible = ref(false);
 const optimizeFieldId = ref('');
 const optimizeFieldLabel = ref('');
@@ -79,6 +192,8 @@ function handleOptimizeConfirm(optimizedText: string) {
   else if (fid === 'api_body' && apiDraft.value) apiDraft.value.bodyText = optimizedText;
   else if (fid === 'ssh_command' && sshDraft.value) sshDraft.value.command = optimizedText;
   else if (fid === 'openclaw_prompt' && openClawDraft.value) openClawDraft.value.systemPromptMarkdown = optimizedText;
+  else if (fid === 'template_prompt' && templateDraft.value) templateDraft.value.prompt = optimizedText;
+  syncDraftToConfigForm();
 }
 
 const formData = reactive({
@@ -90,7 +205,12 @@ const formData = reactive({
   requiresConfirmation: false,
 });
 
-const configKindOptions = getConfigKindOptions();
+const configKindOptions = computed(() => {
+  return executionTypes.value.map(t => ({
+    value: t.type,
+    label: t.label,
+  }));
+});
 
 const currentConfigKind = computed<ConfigKind>(() => {
   if (isApiDraft(configDraft.value)) return 'api';
@@ -102,18 +222,6 @@ const apiDraft = computed(() => (isApiDraft(configDraft.value) ? configDraft.val
 const sshDraft = computed(() => (isSshDraft(configDraft.value) ? configDraft.value : null));
 const templateDraft = computed(() => (isTemplateDraft(configDraft.value) ? configDraft.value : null));
 const openClawDraft = computed(() => (isOpenClawDraft(configDraft.value) ? configDraft.value : null));
-
-// PERIODIC 切回时，如果 JSON 字段为空，自动写入默认模板（避免用户重新手写）
-watch(
-  () => (apiDraft.value ? apiDraft.value.asyncPollStrategy : null),
-  (newStrategy, oldStrategy) => {
-    const draft = apiDraft.value
-    if (!draft) return
-    if (newStrategy === 'PERIODIC' && oldStrategy !== 'PERIODIC' && !draft.asyncPollText.trim()) {
-      draft.asyncPollText = DEFAULT_ASYNC_POLL_TEMPLATE
-    }
-  }
-)
 
 const suggestedTools = computed(() => {
   const names = new Set<string>(['compute']);
@@ -146,12 +254,14 @@ function resetForm() {
 function openCreateForm() {
   isEditMode.value = false;
   resetForm();
+  if (executionTypes.value.length === 0) fetchExecutionTypes();
   isFormVisible.value = true;
 }
 
 async function openEditForm(skillSummary: Skill) {
   try {
     isLoading.value = true;
+    if (executionTypes.value.length === 0) await fetchExecutionTypes();
     const skill = await fetchSkill(skillSummary.id);
     isEditMode.value = true;
     currentId.value = skill.id;
@@ -165,6 +275,7 @@ async function openEditForm(skillSummary: Skill) {
     const parsed = parseSkillDraft(formData.executionMode, rawConfiguration.value);
     parseError.value = parsed.error;
     configDraft.value = parsed.draft ?? createDefaultSkillDraft(formData.executionMode);
+    syncDraftToConfigForm();
     isFormVisible.value = true;
   } catch (e) {
     MessagePlugin.error(`Failed to load skill details: ${e instanceof Error ? e.message : 'Unknown error'}`);
@@ -181,19 +292,10 @@ function handleExecutionModeChange(value: string) {
 }
 
 function handleConfigKindChange(value: string) {
-  const kind = configKindOptions.some((option) => option.value === value) ? (value as ConfigKind) : 'api';
+  const kind = configKindOptions.value.some(option => option.value === value) ? (value as ConfigKind) : 'api';
   configDraft.value = createDefaultSkillDraft('CONFIG', kind);
   parseError.value = null;
-}
-
-function handleApiPresetChange(value: string) {
-  if (!apiDraft.value) return;
-  apiDraft.value.preset = value === 'current-time' ? 'current-time' : 'none';
-  if (apiDraft.value.preset === 'current-time') {
-    if (!apiDraft.value.operation.trim()) apiDraft.value.operation = 'current-time';
-    if (!apiDraft.value.method.trim()) apiDraft.value.method = 'GET';
-    if (!apiDraft.value.endpoint.trim()) apiDraft.value.endpoint = 'https://vv.video.qq.com/checktime?otype=json';
-  }
+  syncDraftToConfigForm();
 }
 
 function addAllowedTool() {
@@ -400,169 +502,13 @@ async function handleEnabledChange(skill: Skill, value: boolean) {
           />
         </t-form-item>
 
-        <template v-if="apiDraft">
-          <t-form-item label="预配置模板" name="apiPreset">
-            <t-select
-              :model-value="apiDraft.preset"
-              :options="[
-                { value: 'none', label: getPresetLabel('api', 'none') },
-                { value: 'current-time', label: getPresetLabel('api', 'current-time') }
-              ]"
-              @change="handleApiPresetChange"
-            />
-          </t-form-item>
-          <t-form-item label="操作标识" name="apiOperation">
-            <t-input v-model="apiDraft.operation" :placeholder="apiDraft.preset === 'current-time' ? '例如：current-time' : '例如：juhe-joke-list'" />
-          </t-form-item>
-          <t-form-item label="请求方法" name="apiMethod">
-            <t-input v-model="apiDraft.method" placeholder="例如：GET / POST" />
-          </t-form-item>
-          <t-form-item label="请求地址" name="apiEndpoint">
-            <t-input v-model="apiDraft.endpoint" :placeholder="apiDraft.preset === 'current-time' ? '例如：https://vv.video.qq.com/checktime?otype=json' : '例如：http://v.juhe.cn/joke/content/list'" />
-          </t-form-item>
-          <t-form-item label="参数绑定" name="apiParameterBinding">
-            <t-radio-group v-model="apiDraft.parameterBinding">
-              <t-radio-button value="query">URL Query（默认）</t-radio-button>
-              <t-radio-button value="jsonBody">JSON Body</t-radio-button>
-              <t-radio-button value="formBody">Form Body</t-radio-button>
-            </t-radio-group>
-            <p class="skill-param-binding-hint">
-              扁平契约字段可写入 URL 查询参数、JSON 请求体，或
-              <code>application/x-www-form-urlencoded</code> 表单（POST/PUT/PATCH/DELETE 等；GET/HEAD
-              仍走 Query）。注册类 JSON 接口选「JSON Body」；只接受表单的旧接口选「Form Body」。
-            </p>
-          </t-form-item>
-          <t-form-item label="时间戳字段" name="apiResponseTimestampField">
-            <t-input v-model="apiDraft.responseTimestampField" placeholder="例如：t" />
-          </t-form-item>
-          <t-form-item label="接口说明" name="apiInterfaceDescription">
-            <div class="optimize-textarea-wrap">
-              <t-textarea v-model="apiDraft.interfaceDescription" :autosize="{ minRows: 3, maxRows: 6 }" placeholder="例如：该接口用于获取笑话列表，包含入参说明、出参说明、核心字段意义、限制、字典值和默认值" />
-              <t-button size="small" variant="text" class="optimize-btn" @click="openTextOptimize('api_interface_description', '接口说明', apiDraft!.interfaceDescription)">
-                ✨ AI 优化
-              </t-button>
-            </div>
-          </t-form-item>
-          <t-form-item label="参数格式契约 (JSON)" name="apiParameterContract">
-            <div class="optimize-textarea-wrap">
-              <t-textarea v-model="apiDraft.parameterContractText" :autosize="{ minRows: 3, maxRows: 8 }" placeholder='例如：{"type":"object","properties":{"page":{"type":"number"}}}' />
-              <t-button size="small" variant="text" class="optimize-btn" @click="openTextOptimize('api_parameter_contract', '参数格式契约', apiDraft!.parameterContractText)">
-                ✨ AI 优化
-              </t-button>
-            </div>
-          </t-form-item>
-          <t-form-item label="Headers (JSON，可选)" name="apiHeaders">
-            <div class="optimize-textarea-wrap">
-              <t-textarea v-model="apiDraft.headersText" :autosize="{ minRows: 3, maxRows: 6 }" placeholder='例如：{"Authorization":"Bearer token"}' />
-              <t-button size="small" variant="text" class="optimize-btn" @click="openTextOptimize('api_headers', 'Headers', apiDraft!.headersText)">
-                ✨ AI 优化
-              </t-button>
-            </div>
-          </t-form-item>
-          <t-form-item label="Query (JSON，可选)" name="apiQuery">
-            <div class="optimize-textarea-wrap">
-              <t-textarea v-model="apiDraft.queryText" :autosize="{ minRows: 3, maxRows: 6 }" placeholder='例如：{"page":1,"pagesize":1}' />
-              <t-button size="small" variant="text" class="optimize-btn" @click="openTextOptimize('api_query', 'Query', apiDraft!.queryText)">
-                ✨ AI 优化
-              </t-button>
-            </div>
-          </t-form-item>
-          <t-form-item label="Body (JSON，可选)" name="apiBody">
-            <div class="optimize-textarea-wrap">
-              <t-textarea v-model="apiDraft.bodyText" :autosize="{ minRows: 3, maxRows: 6 }" placeholder='例如：{"foo":"bar"}' />
-              <t-button size="small" variant="text" class="optimize-btn" @click="openTextOptimize('api_body', 'Body', apiDraft!.bodyText)">
-                ✨ AI 优化
-              </t-button>
-            </div>
-          </t-form-item>
-          <t-form-item label="HTTP 超时（秒）" name="apiTimeoutSeconds">
-            <t-input-number
-              v-model="apiDraft.timeoutSeconds"
-              :min="1"
-              :max="3600"
-              placeholder="默认 30"
-              style="width: 160px"
-            />
-            <p class="skill-param-binding-hint">
-              调用上游 API 的超时等待秒数（1 ~ 3600）。默认 30 秒，超时未响应将返回错误。
-              长时间运行的任务建议启用下方「异步轮询」模式。
-            </p>
-          </t-form-item>
-          <t-form-item label="异步轮询" name="apiAsyncPoll">
-            <t-checkbox v-model="apiDraft.asyncPollEnabled">启用异步轮询模式</t-checkbox>
-            <p class="skill-param-binding-hint">
-              适用于上游 API 返回 task_id 后需要轮询结果的场景（批量任务、数据导出等）。
-              要求上游提供独立的状态查询端点（见文档）。
-            </p>
-          </t-form-item>
-          <t-form-item v-if="apiDraft.asyncPollEnabled" label="轮询策略" name="apiAsyncPollStrategy">
-            <t-radio-group v-model="apiDraft.asyncPollStrategy">
-              <t-radio value="PERIODIC">周期轮询（需要提供状态查询端点 + {id} 占位符）</t-radio>
-              <t-radio value="SINGLE_CALL">单次长调用（无需 pollEndpoint，提交后立即返回，长 readTimeout 等结果）</t-radio>
-            </t-radio-group>
-          </t-form-item>
-          <t-form-item v-if="apiDraft.asyncPollEnabled && apiDraft.asyncPollStrategy === 'SINGLE_CALL'" label="单次调用 read timeout（秒）" name="apiAsyncPollReadTimeoutSeconds">
-            <t-input-number v-model="apiDraft.asyncPollReadTimeoutSeconds" :min="1" :max="3600" :step="30" />
-            <p class="skill-param-binding-hint">
-              单次调用的最大等待时间（秒）。到达后由后台线程继续等待，完成后写回通知中心。默认 600。
-            </p>
-          </t-form-item>
-          <t-form-item v-if="apiDraft.asyncPollEnabled && apiDraft.asyncPollStrategy === 'PERIODIC'" label="异步轮询配置 (JSON)" name="apiAsyncPollText">
-            <div class="optimize-textarea-wrap">
-              <t-textarea
-                v-model="apiDraft.asyncPollText"
-                :autosize="{ minRows: 6, maxRows: 14 }"
-                :placeholder="DEFAULT_ASYNC_POLL_TEMPLATE"
-              />
-              <t-button size="small" variant="text" class="optimize-btn" @click="openTextOptimize('api_async_poll', '异步轮询配置', apiDraft!.asyncPollText)">
-                ✨ AI 优化
-              </t-button>
-            </div>
-          </t-form-item>
-        </template>
-
-        <template v-else-if="sshDraft">
-          <t-form-item label="预配置模板" name="sshPreset">
-            <t-input :model-value="getPresetLabel('ssh', sshDraft.preset)" readonly />
-          </t-form-item>
-          <t-form-item label="操作标识" name="sshOperation">
-            <t-input v-model="sshDraft.operation" placeholder="例如：server-resource-status" />
-          </t-form-item>
-          <t-form-item label="服务器查找器" name="sshLookup">
-            <t-input v-model="sshDraft.lookup" placeholder="例如：server_lookup" />
-          </t-form-item>
-          <t-form-item label="执行器" name="sshExecutor">
-            <t-input v-model="sshDraft.executor" placeholder="例如：linux_script_executor" />
-          </t-form-item>
-          <t-form-item label="调用说明（可选，面向模型）" name="sshInterfaceDescription">
-            <t-textarea
-              v-model="sshDraft.interfaceDescription"
-              :autosize="{ minRows: 3, maxRows: 8 }"
-              placeholder="说明工具调用方式（例如台账别名字段）；生成器会写入，也可留空"
-            />
-          </t-form-item>
-          <t-form-item label="执行命令" name="sshCommand">
-            <div class="optimize-textarea-wrap">
-              <t-textarea v-model="sshDraft.command" :autosize="{ minRows: 5, maxRows: 10 }" />
-              <t-button size="small" variant="text" class="optimize-btn" @click="openTextOptimize('ssh_command', '执行命令', sshDraft!.command)">
-                ✨ AI 优化
-              </t-button>
-            </div>
-          </t-form-item>
-          <t-form-item label="只读模式" name="sshReadOnly">
-            <t-checkbox v-model="sshDraft.readOnly">该 SSH 预配置 Skill 只允许只读命令</t-checkbox>
-          </t-form-item>
-        </template>
-
-        <template v-else-if="templateDraft">
-          <t-form-item label="提示词" name="templatePrompt">
-            <t-textarea
-              v-model="templateDraft.prompt"
-              :autosize="{ minRows: 6, maxRows: 16 }"
-              placeholder="输入可复用的提示词文本"
-            />
-          </t-form-item>
-        </template>
+        <ConfigFormRenderer
+          v-if="currentConfigSchema"
+          :config-schema="currentConfigSchema"
+          :model-value="configFormValues"
+          @update:model-value="(val: Record<string, unknown>) => configFormValues = val"
+          @optimize="(fieldId: string, fieldLabel: string, currentValue: string) => { optimizeFieldId = fieldId; optimizeFieldLabel = fieldLabel; optimizeOriginalText = currentValue; optimizeContext = `Skill 名称: ${formData.name}`; optimizeVisible = true; }"
+        />
       </template>
 
       <template v-else-if="openClawDraft">

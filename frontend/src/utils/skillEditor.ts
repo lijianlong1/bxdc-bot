@@ -190,6 +190,10 @@ function formatJsonText(value: unknown): string {
   return JSON.stringify(value, null, 2)
 }
 
+function isEmptyRecord(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0
+}
+
 function parseJsonText(text: string, fieldName: string): unknown {
   const trimmed = text.trim()
   if (!trimmed) return undefined
@@ -466,11 +470,11 @@ export function serializeSkillDraft(executionMode: ExecutionMode, draft: SkillCo
       method: requireNonEmpty(draft.method, '请求方法'),
       endpoint: requireNonEmpty(draft.endpoint, '请求地址'),
       ...(draft.timeoutSeconds !== 30 ? { timeoutSeconds: draft.timeoutSeconds } : {}),
-      ...(draft.parameterBinding !== 'query' ? { parameterBinding: draft.parameterBinding } : {}),
+      parameterBinding: draft.parameterBinding,
       ...(draft.responseTimestampField.trim() ? { responseTimestampField: draft.responseTimestampField.trim() } : {}),
-      ...(headers !== undefined ? { headers } : {}),
-      ...(query !== undefined ? { query } : {}),
-      ...(body !== undefined ? { body } : {}),
+      ...(headers !== undefined && !isEmptyRecord(headers) ? { headers } : {}),
+      ...(query !== undefined && !isEmptyRecord(query) ? { query } : {}),
+      ...(body !== undefined && !isEmptyRecord(body) ? { body } : {}),
       ...(draft.interfaceDescription.trim() ? { interfaceDescription: draft.interfaceDescription.trim() } : {}),
       ...(parameterContract !== undefined ? { parameterContract } : {}),
       ...(asyncPoll !== undefined && asyncPoll !== null ? { asyncPoll } : {}),

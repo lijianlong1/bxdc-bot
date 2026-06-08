@@ -168,7 +168,35 @@ public class ApiProxyService {
     private Object normalizeBodyForContentType(Object body, HttpHeaders httpHeaders) {
         MediaType contentType = httpHeaders.getContentType();
         boolean isJsonType = contentType != null && MediaType.APPLICATION_JSON.includes(contentType);
+        boolean isFormType = contentType != null && MediaType.APPLICATION_FORM_URLENCODED.includes(contentType);
+
+        // When Content-Type is form-urlencoded but body is a Map, encode it as form-urlencoded string
+        if (isFormType && body instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) body;
+            return encodeMapToFormUrlEncoded(map);
+        }
+
         return deepNormalize(body, isJsonType);
+    }
+
+    /** Encode a flat Map to application/x-www-form-urlencoded string. */
+    private String encodeMapToFormUrlEncoded(Map<String, Object> map) {
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            if (entry.getValue() == null) continue;
+            if (!first) sb.append('&');
+            try {
+                sb.append(java.net.URLEncoder.encode(entry.getKey(), "UTF-8"));
+                sb.append('=');
+                sb.append(java.net.URLEncoder.encode(String.valueOf(entry.getValue()), "UTF-8"));
+            } catch (java.io.UnsupportedEncodingException e) {
+                // UTF-8 is always supported
+            }
+            first = false;
+        }
+        return sb.toString();
     }
 
     @SuppressWarnings("unchecked")

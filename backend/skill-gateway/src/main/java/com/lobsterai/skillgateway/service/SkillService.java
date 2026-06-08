@@ -62,6 +62,7 @@ public class SkillService {
         validateSkillAvatar(skill.getAvatar());
         skill.setExecutionMode(normalizeExecutionMode(skill.getExecutionMode()));
         skill.setConfiguration(normalizeAndValidateConfiguration(skill.getExecutionMode(), skill.getConfiguration()));
+        persistSchemaProperties(skill);
         skillMapper.insert(skill);
         return skill;
     }
@@ -80,6 +81,7 @@ public class SkillService {
         skill.setType(skillDetails.getType());
         skill.setExecutionMode(normalizeExecutionMode(skillDetails.getExecutionMode()));
         skill.setConfiguration(normalizeAndValidateConfiguration(skill.getExecutionMode(), skillDetails.getConfiguration()));
+        persistSchemaProperties(skill);
         skill.setEnabled(skillDetails.isEnabled());
         skill.setRequiresConfirmation(skillDetails.isRequiresConfirmation());
         if (skillDetails.getVisibility() != null) {
@@ -106,6 +108,29 @@ public class SkillService {
             throw new IllegalArgumentException("Skill not found for this id :: " + id);
         }
         skillMapper.deleteById(id);
+    }
+
+    /**
+     * Compute schema properties from the skill's configuration JSON
+     * and persist them to the schema_properties DB column.
+     */
+    private void persistSchemaProperties(Skill skill) {
+        try {
+            String config = skill.getConfiguration();
+            if (config == null || config.isEmpty()) {
+                skill.setSchemaPropertiesJson(null);
+                return;
+            }
+            java.util.Map<String, java.util.Map<String, Object>> props =
+                Skill.computeSchemaPropertiesInternal(config);
+            if (props.isEmpty()) {
+                skill.setSchemaPropertiesJson(null);
+                return;
+            }
+            skill.setSchemaPropertiesJson(objectMapper.writeValueAsString(props));
+        } catch (Exception e) {
+            skill.setSchemaPropertiesJson(null);
+        }
     }
 
     /** Optional emoji; when set, same length bound as user avatar. */

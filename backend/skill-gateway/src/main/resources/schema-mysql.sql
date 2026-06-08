@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS skills (
     avatar VARCHAR(32),
     created_by VARCHAR(128),
     created_at DATETIME,
-    updated_at DATETIME
+    updated_at DATETIME,
+    schema_properties TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS audit_logs (
