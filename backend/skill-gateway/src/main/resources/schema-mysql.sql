@@ -157,7 +157,7 @@ CREATE TABLE IF NOT EXISTS async_tasks (
     INDEX idx_async_status (status),
     INDEX idx_async_skill_id (skill_id),
     INDEX idx_async_user_unread (user_id, status, notified_at),
-    INDEX idx_async_user_session_sig_time (user_id, session_id, request_signature, created_at)
+    INDEX idx_async_user_sig_time (user_id, request_signature, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS skill_text_prompts (
