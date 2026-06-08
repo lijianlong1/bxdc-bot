@@ -14,6 +14,7 @@ export interface ConfigSchemaProperty {
   readonly?: boolean;
   aiHint?: string;
   aiOptimize?: { fieldId: string };
+  visibleWhen?: { field: string; equals: unknown };
 }
 
 export interface ConfigSchema {
@@ -32,7 +33,12 @@ const emit = defineEmits<{
 }>();
 
 const properties = computed(() => {
-  return Object.entries(props.configSchema.properties ?? {});
+  return Object.entries(props.configSchema.properties ?? {}).filter(([, prop]) => {
+    if (!prop.visibleWhen) return true;
+    const currentValue = props.modelValue[prop.visibleWhen.field]
+      ?? props.configSchema.properties[prop.visibleWhen.field]?.default;
+    return currentValue === prop.visibleWhen.equals;
+  });
 });
 
 function getFieldValue(key: string): unknown {
@@ -94,7 +100,7 @@ function handleOptimize(key: string) {
     :rules="prop.required ? [{ validator: (val: unknown) => { const v = val; return v !== undefined && v !== null && String(v).trim() !== ''; }, message: `${prop.label}不能为空` }] : undefined"
   >
     <template #label>
-      <div class="form-label-wrap">
+      <div v-if="prop.ui !== 'checkbox'" class="form-label-wrap">
         <span class="form-label-text">
           <span v-if="prop.required" class="form-label-required">*</span>
           {{ prop.label }}
@@ -117,6 +123,29 @@ function handleOptimize(key: string) {
       :options="(prop.enum ?? []).map(v => ({ value: v, label: v }))"
       @change="(val: string) => setFieldValue(key, val)"
     />
+
+    <t-checkbox
+      v-else-if="prop.ui === 'checkbox'"
+      :model-value="Boolean(getFieldValue(key) ?? prop.default ?? false)"
+      @change="(val: boolean) => setFieldValue(key, val)"
+    >
+      {{ prop.label }}
+    </t-checkbox>
+
+    <div v-else-if="prop.ui === 'radio'">
+      <t-radio-group
+        :model-value="String(getFieldValue(key) ?? prop.default ?? '')"
+        @change="(val: string) => setFieldValue(key, val)"
+      >
+        <t-radio
+          v-for="opt in (prop.enum ?? [])"
+          :key="opt"
+          :value="opt"
+        >
+          {{ opt === 'SINGLE_CALL' ? '单次长调用（无需 pollEndpoint，提交后立即返回，长 readTimeout 等结果）' : opt === 'PERIODIC' ? '周期轮询（需要提供状态查询端点 + {id} 占位符）' : opt }}
+        </t-radio>
+      </t-radio-group>
+    </div>
 
     <t-input-number
       v-else-if="prop.ui === 'number'"

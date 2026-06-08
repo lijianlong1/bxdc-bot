@@ -96,6 +96,9 @@ function draftToFormValues(draft: SkillConfigDraft): Record<string, unknown> {
       interfaceDescription: draft.interfaceDescription,
       parameterContract: pc,
       asyncPoll: asyncPollVal,
+      asyncPollEnabled: draft.asyncPollEnabled,
+      asyncPollStrategy: draft.asyncPollStrategy,
+      asyncPollReadTimeoutSeconds: draft.asyncPollReadTimeoutSeconds,
     };
   }
   if (isSshDraft(draft)) {
@@ -131,9 +134,13 @@ function updateDraftFromFormValues(values: Record<string, unknown>) {
     d.queryText = values.query && typeof values.query === 'object' ? JSON.stringify(values.query, null, 2) : (typeof values.query === 'string' ? values.query : d.queryText);
     d.bodyText = values.body && typeof values.body === 'object' ? JSON.stringify(values.body, null, 2) : (typeof values.body === 'string' ? values.body : d.bodyText);
     d.parameterContractText = values.parameterContract && typeof values.parameterContract === 'object' ? JSON.stringify(values.parameterContract, null, 2) : (typeof values.parameterContract === 'string' ? values.parameterContract : d.parameterContractText);
-    d.asyncPollEnabled = values.asyncPoll !== undefined && values.asyncPoll !== null;
+    d.asyncPollEnabled = typeof values.asyncPollEnabled === 'boolean' ? values.asyncPollEnabled : d.asyncPollEnabled;
+    d.asyncPollStrategy = (values.asyncPollStrategy as ApiConfigDraft['asyncPollStrategy']) ?? d.asyncPollStrategy;
+    d.asyncPollReadTimeoutSeconds = typeof values.asyncPollReadTimeoutSeconds === 'number' ? values.asyncPollReadTimeoutSeconds : d.asyncPollReadTimeoutSeconds;
     if (values.asyncPoll !== undefined && values.asyncPoll !== null) {
       d.asyncPollText = typeof values.asyncPoll === 'object' ? JSON.stringify(values.asyncPoll, null, 2) : String(values.asyncPoll);
+    } else if (!values.asyncPollEnabled) {
+      d.asyncPollText = '';
     }
   } else if (isSshDraft(configDraft.value)) {
     const d = configDraft.value as SshConfigDraft;

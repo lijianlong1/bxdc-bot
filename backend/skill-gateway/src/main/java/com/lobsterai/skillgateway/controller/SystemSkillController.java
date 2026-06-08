@@ -172,13 +172,52 @@ public class SystemSkillController {
         pc.put("aiOptimize", pcAiOpt);
         props.put("parameterContract", pc);
 
+        Map<String, Object> asyncPollEnabled = new LinkedHashMap<>();
+        asyncPollEnabled.put("type", "boolean");
+        asyncPollEnabled.put("label", "启用异步轮询");
+        asyncPollEnabled.put("ui", "checkbox");
+        asyncPollEnabled.put("default", false);
+        asyncPollEnabled.put("aiHint", "适用于上游 API 返回 task_id 后需要轮询结果的场景");
+        props.put("asyncPollEnabled", asyncPollEnabled);
+
+        Map<String, Object> asyncPollStrategy = new LinkedHashMap<>();
+        asyncPollStrategy.put("type", "string");
+        asyncPollStrategy.put("label", "轮询策略");
+        asyncPollStrategy.put("ui", "radio");
+        asyncPollStrategy.put("default", "PERIODIC");
+        asyncPollStrategy.put("enum", java.util.Arrays.asList("PERIODIC", "SINGLE_CALL"));
+        Map<String, Object> strategyVisibleWhen = new LinkedHashMap<>();
+        strategyVisibleWhen.put("field", "asyncPollEnabled");
+        strategyVisibleWhen.put("equals", true);
+        asyncPollStrategy.put("visibleWhen", strategyVisibleWhen);
+        asyncPollStrategy.put("aiHint", "PERIODIC=周期轮询, SINGLE_CALL=单次长调用");
+        props.put("asyncPollStrategy", asyncPollStrategy);
+
+        Map<String, Object> asyncPollReadTimeout = new LinkedHashMap<>();
+        asyncPollReadTimeout.put("type", "number");
+        asyncPollReadTimeout.put("label", "单次调用 read timeout（秒）");
+        asyncPollReadTimeout.put("ui", "number");
+        asyncPollReadTimeout.put("default", 600);
+        asyncPollReadTimeout.put("minimum", 1);
+        asyncPollReadTimeout.put("maximum", 3600);
+        Map<String, Object> timeoutVisibleWhen = new LinkedHashMap<>();
+        timeoutVisibleWhen.put("field", "asyncPollStrategy");
+        timeoutVisibleWhen.put("equals", "SINGLE_CALL");
+        asyncPollReadTimeout.put("visibleWhen", timeoutVisibleWhen);
+        asyncPollReadTimeout.put("aiHint", "单次调用的最大等待时间，到达后由后台线程继续等待");
+        props.put("asyncPollReadTimeoutSeconds", asyncPollReadTimeout);
+
         Map<String, Object> asyncPoll = new LinkedHashMap<>();
         asyncPoll.put("type", "object");
-        asyncPoll.put("label", "异步轮询配置");
+        asyncPoll.put("label", "异步轮询配置 (JSON)");
         asyncPoll.put("ui", "jsonEditor");
         Map<String, Object> pollAiOpt = new LinkedHashMap<>();
         pollAiOpt.put("fieldId", "api_async_poll");
         asyncPoll.put("aiOptimize", pollAiOpt);
+        Map<String, Object> pollVisibleWhen = new LinkedHashMap<>();
+        pollVisibleWhen.put("field", "asyncPollStrategy");
+        pollVisibleWhen.put("equals", "PERIODIC");
+        asyncPoll.put("visibleWhen", pollVisibleWhen);
         asyncPoll.put("aiHint", "启用后 Gateway 内部完成轮询闭环。示例: {\"pollEndpoint\":\"...\",\"idJsonPath\":\"$.taskId\",\"completionJsonPath\":\"$.status\",\"completionValue\":\"COMPLETED\"}");
         props.put("asyncPoll", asyncPoll);
 
