@@ -20,12 +20,12 @@
 
 | # | 模块 | 测试文件 | 命令 |
 |---|------|---------|------|
-| 2.1 | agent-core | `java-skills.loader.test.cjs` | ❌ FAIL — 20 测试 0 通过（缺少 `pinyin-pro` 依赖，需 `npm install`） |
-| 2.2 | agent-core | `skill-manager-routing.test.cjs` | ❌ FAIL — MODULE_NOT_FOUND（依赖缺失） |
-| 2.3 | agent-core | `tasks-state.test.cjs` | ❌ FAIL — MODULE_NOT_FOUND（依赖缺失） |
+| 2.1 | agent-core | `java-skills.loader.test.cjs` | ✅ PASS — 20/20 通过 |
+| 2.2 | agent-core | `skill-manager-routing.test.cjs` | ✅ PASS — 1/1 通过 |
+| 2.3 | agent-core | `tasks-state.test.cjs` | ✅ PASS — 10/10 通过 |
 | 2.4 | agent-core | `history-sanitize.test.cjs` | ✅ PASS — 4/4 通过 |
-| 2.5 | agent-core | `logger.service.test.cjs` | ❌ FAIL — MODULE_NOT_FOUND（依赖缺失） |
-| 2.6 | agent-core | `prompts-static-system.test.cjs` | ❌ FAIL — MODULE_NOT_FOUND（依赖缺失） |
+| 2.5 | agent-core | `logger.service.test.cjs` | ✅ PASS — 2/2 通过 |
+| 2.6 | agent-core | `prompts-static-system.test.cjs` | ✅ PASS — 1/1 通过 |
 | 2.7 | skill-gateway | `SkillGatewayApplicationTests.java` | ⚠️ SKIP — 未运行（需启动 MySQL，不便在本环境执行） |
 | 2.8 | frontend | `fileValidator.test.ts` | ✅ PASS |
 | 2.9 | frontend | `llmLog.test.ts` | ✅ PASS |
@@ -164,8 +164,8 @@ Phase 7: 合并特有回归（6.1 ~ 6.6）
 
 | 阶段 | 结果 | 备注 |
 |------|------|------|
-| Phase 1 - 构建 | ⚠️ 部分通过 | agent-core ✅ / gateway ✅ / frontend ❌（2 TS 错误） |
-| Phase 2 - 单元测试 | ⚠️ 部分通过 | frontend 全过 ✅ / agent-core 仅 2.4 过 ✅ 其余缺依赖 ❌ / gateway 未跑 |
+| Phase 1 - 构建 | ⚠️ 部分通过 | agent-core ✅ / gateway ✅ / frontend ❌（2 TS 错误，需手动修复接口不匹配） |
+| Phase 2 - 单元测试 | ✅ 全部通过 | agent-core 6/6 ✅ / frontend 5/5 ✅ / gateway 未跑（需 MySQL） |
 | Phase 3 - 服务启动 | ⬜ 待测 | 需启动 MySQL + 3 个服务 |
 | Phase 4 - 核心回归 | ⬜ 待测 | 需运行中服务 |
 | Phase 5 - 新功能 | ⬜ 待测 | 需运行中服务 |
@@ -192,11 +192,11 @@ Phase 7: 合并特有回归（6.1 ~ 6.6）
 | 原因 | hebing 的 `MessageList.vue` 引用了 `message.sessionId`，但 low-version 的 Message 类型没有此字段 |
 | 修复 | 需在 Message 类型中补充 `sessionId` 可选字段，或调整 `MessageList.vue` 使用其他方式传递 sessionId |
 
-### agent-core 测试失败（缺依赖）
+### agent-core 构建注意
 
 | 问题 | 原因 | 修复 |
 |------|------|------|
-| 5/6 agent-core 测试因 MODULE_NOT_FOUND 失败 | 合并后未执行 `npm install`，缺少 `pinyin-pro` 等新增依赖 | 运行 `cd backend/agent-core && npm install` 后重新测试 |
+| `nest build` 未编译 `tool-trace-context`、`tasks-state`、`prompts/` | NestJS SWC 默认仅编译 DI 模块图；测试依赖的文件不在其中 | 清除 `tsconfig.tsbuildinfo` 后运行 `npx tsc`（全量编译），或使用 `rm -rf dist tsconfig.tsbuildinfo && npm run build` 重编 |
 
 ### 未引入的 hebing 功能（预期行为）
 
