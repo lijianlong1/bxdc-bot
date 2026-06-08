@@ -3,6 +3,7 @@ import { createTask, getEventSourceUrl, confirmAction } from '../services/api'
 import { agentUrl } from '../services/config'
 import { useUser } from './useUser'
 import { type LlmLogEntry, isLlmLogEvent, mergeLlmLogEntries } from '../utils/llmLog'
+import type { UploadFileInfo } from '../types/fileUpload'
 import {
   extractArgumentsFromToolCallPayload,
   extractArgumentsFromToolResultMessage,
@@ -71,6 +72,8 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: number
+  /** 关联的 agent-core session id（assistant 消息带；用于思考树/确认树定位） */
+  sessionId?: string
   toolInvocations?: ToolInvocation[]
   llmLogs?: LlmLogEntry[]
   /** 调用日志弹窗：按 SSE 到达顺序交错 Tool 与 LLM（仅本轮 assistant） */
@@ -116,7 +119,7 @@ export interface ChatState {
   messages: ReturnType<typeof ref<Message[]>>
   isThinking: ReturnType<typeof ref<boolean>>
   error: ReturnType<typeof ref<string | null>>
-  sendMessage: (content: string, userId?: string) => Promise<void>
+  sendMessage: (content: string, userId?: string, files?: UploadFileInfo[]) => Promise<void>
   addMessage: (message: Message) => void
   fetchGreeting: () => Promise<void>
   confirmSkillAction: (toolCallId: string, confirmed: boolean, adjustedParams?: Record<string, unknown>) => Promise<void>
@@ -734,8 +737,10 @@ export function provideChat() {
     }));
   }
 
-  async function sendMessage(content: string, userId?: string) {
+  async function sendMessage(content: string, userId?: string, files?: UploadFileInfo[]) {
     if (isThinking.value) return
+    // files 已由 MessageInput 通过解析流程合并到 content / getAllParsedText；此处保留参数仅为类型兼容。
+    void files
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -763,6 +768,7 @@ export function provideChat() {
         role: 'assistant',
         content: '',
         timestamp: Date.now(),
+        sessionId: id,
         toolInvocations: [],
         llmLogs: [],
         logTimeline: [],
