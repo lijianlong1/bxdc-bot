@@ -1,13 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  项目级 Maven 配置：
+  - localRepository 指向项目内的 .m2/repository（不进 git，已 .gitignore）
+  - 团队成员 clone 下来后无需任何配置，Maven 自动用项目目录的 .m2
+  - Docker build 时也不需要挂载宿主机的 ~/.m2
+  - ⚠️ mvn 启动时会基于 cwd 解析相对路径
+    所以务必在 backend/skill-gateway 目录下跑 mvn 命令
+-->
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
-                      http://maven.apache.org/xsd/settings-1.0.0.xsd">
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              http://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+  <!-- 强制使用项目目录的 .m2/repository（覆盖默认 ~/.m2/repository）-->
+  <localRepository>.m2/repository</localRepository>
+
+  <!-- 阿里云镜像（覆盖所有 central / jcenter）-->
   <mirrors>
     <mirror>
       <id>aliyunmaven</id>
-      <mirrorOf>*</mirrorOf>
       <name>阿里云公共仓库</name>
       <url>https://maven.aliyun.com/repository/public</url>
+      <mirrorOf>*</mirrorOf>
     </mirror>
   </mirrors>
 </settings>
