@@ -196,7 +196,7 @@ function createInstance() {
     drawerVisible.value = false
   }
 
-  function startPolling(intervalMs = 30_000): void {
+  function startPolling(intervalMs = 5_000): void {
     stopPolling()
     // 立即拉一次
     fetchUnreadCount()
