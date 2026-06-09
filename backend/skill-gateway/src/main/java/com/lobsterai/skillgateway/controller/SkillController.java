@@ -356,10 +356,12 @@ public class SkillController {
             task.setCompletionValue((String) asyncPoll.get("completionValue"));
             task.setResultJsonPath((String) asyncPoll.get("resultJsonPath"));
             task.setPollStrategy(pollStrategy);
-            if (singleCallReadTimeoutSeconds != null && singleCallReadTimeoutSeconds >= 60) {
+            if (singleCallReadTimeoutSeconds != null && singleCallReadTimeoutSeconds >= 10) {
                 task.setSingleCallReadTimeoutSeconds(singleCallReadTimeoutSeconds);
             } else if (singleCallMode) {
-                // SINGLE_CALL 兜底：未传或 < 60s 都强制用 600s（10 分钟）
+                // SINGLE_CALL 兜底：未传或 < 10s 都强制用 600s（10 分钟），
+                // 避免 1-5s 这种过小值让长程任务在到达前就被服务端断开。
+                // 与 agent-core executeConfiguredApiSkillAsync 同步。
                 task.setSingleCallReadTimeoutSeconds(600);
             }
 

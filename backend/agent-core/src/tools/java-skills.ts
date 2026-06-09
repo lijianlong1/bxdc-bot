@@ -1539,8 +1539,9 @@ async function executeConfiguredApiSkill(
     if (effectiveAsyncPoll.pollStrategy === "SINGLE_CALL") {
       // SINGLE_CALL：readTimeout 默认 600s（10 分钟）。
       // 不复用 maxWaitSeconds —— 后者是 PERIODIC 轮询的最长等待时间，语义不同。
-      // 太小（如 10s）会导致长程任务在到达前就被服务端断开。
-      if (!effectiveAsyncPoll.singleCallReadTimeoutSeconds || effectiveAsyncPoll.singleCallReadTimeoutSeconds < 60) {
+      // < 10s 强制 600s，避免 1-5s 这种过小值让长程任务在到达前被服务端断开。
+      // 与 gateway /api/skills/api/async 同步。
+      if (!effectiveAsyncPoll.singleCallReadTimeoutSeconds || effectiveAsyncPoll.singleCallReadTimeoutSeconds < 10) {
         effectiveAsyncPoll.singleCallReadTimeoutSeconds = 600;
       }
     }
