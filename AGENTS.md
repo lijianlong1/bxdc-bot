@@ -156,3 +156,24 @@ npx openspec archive <name> -y     # 归档（-y 跳过交互）
 - schema 变更优先用 Flyway / Liquibase 或 Spring Data JPA 自动 ddl，或者 `schema-mysql.sql` 一次性初始化（Spring `spring.sql.init.mode=always` 自动跑）
 - **不要**在多个增量 commit 里改 `schema-mysql.sql` 让用户手动 `mysql -e "..."` 跑
 - 复杂 schema 变更（加索引 / 改字段类型 / 数据迁移）走 Java migration 类（参考 `StartupRecoveryRunner` 模式）
+
+### 7.4 Java 版本与 language level 必须保持 JDK 1.8
+- 编译目标统一为 **JDK 1.8**（`pom.xml` 的 `<java.version>1.8</java.version>` 与 `maven-compiler-plugin` 的 `source/target` 同步）
+- IntelliJ Project language level 必须设为 **8 - Lambdas, type annotations etc.**（与 JDK 1.8 严格对应）
+  - 不要选 `11 - Local variable syntax for lambda parameters`、`14 - Switch expressions` 等更高 level
+  - 不要选 `7 - Diamonds, ARM, multi-catch etc.`（过老，缺 type annotations）
+- 代码里**禁止**出现 `var`、Records、`sealed interface`、`switch` 表达式（Java 14+ 特性）、`instanceof` 模式匹配（Java 16+）、text block `"""`（Java 13+ preview / Java 15+ GA）等高版本语法
+- 如果用到了 JDK 1.8 不支持的新 API（例如 `List.of(...)` 是 Java 9+、`var` 是 Java 10+），需要**降级**到 1.8 兼容写法（如 `Arrays.asList(...)`、显式类型）
+- 升级 JDK 需要团队评审 + 同步修改 IDEA 项目 language level + 更新本规约
+
+### 7.5 新功能架构约束：不改 agent-core，走 Tool 接入 + Schema 动态渲染
+- **尽量不修改 agent-core（NestJS）代码**：agent-core 作为 LLM 调度层应保持稳定，新增能力优先在 gateway（Java）侧以 Tool 形式接入
+- **新能力 = 新 Skill 类型**：参照 `api`（API 代理）、`ssh`（SSH 执行）的模式，在 `SystemSkillController.buildXxxConfigSchema()` 中定义配置 schema，在 gateway 侧实现执行逻辑
+- **Skill 编辑页用 Schema 驱动动态渲染**：`ConfigFormRenderer` 基于后端 `/api/system-skills/execution-types` 返回的 `configSchema` 动态渲染表单，新增 Skill 类型只需扩展后端 schema + ConfigFormRenderer 的 UI 类型支持（如 checkbox / radio 等），**不要**在 `SkillManagementModal.vue` 中为每种类型硬编码模板
+- **如需修改 agent-core（基础能力级别变更）**：如果需求确实无法通过 gateway Tool 接入实现（如修改 LLM 调度策略、tool-call 协议、SSE 通信机制等基础能力），必须在 OpenSpec proposal + design 中**明确说明**：
+  - 为什么不能走 Tool 接入？（技术瓶颈在哪）
+  - 对 agent-core 哪些模块有影响？（具体文件 / 类 / 函数）
+  - 对现有 Skill 类型的兼容性影响？（是否破坏已有 api / ssh / template / openclaw 的行为）
+  - 是否需要 agent-core 单独回归测试？
+  以便开发人员评估是否接受这次架构侵入
+
