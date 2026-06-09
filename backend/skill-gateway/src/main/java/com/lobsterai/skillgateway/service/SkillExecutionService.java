@@ -493,19 +493,16 @@ public class SkillExecutionService {
         asyncTaskPollingService.createTask(task);
         log.info("Created async task {} for skill {} (external={})", task.getId(), skill.getId(), externalTaskId);
 
-        // Step 5: Register future and wait
-        java.util.concurrent.CompletableFuture<String> future = asyncTaskPollingScheduler.registerFuture(task.getId());
-
-        try {
-            String result = future.get(maxWaitSeconds + 30, java.util.concurrent.TimeUnit.SECONDS);
-            return result.startsWith("{") ? objectMapper.readValue(result, Object.class) : result;
-        } catch (java.util.concurrent.TimeoutException e) {
-            asyncTaskPollingService.updatePollResult(task.getId(), "TIMEOUT", null, "Task timed out after " + maxWaitSeconds + " seconds");
-            Map<String, Object> timeout = new LinkedHashMap<>();
-            timeout.put("status", "TIMEOUT");
-            timeout.put("errorMessage", "Task timed out after " + maxWaitSeconds + " seconds");
-            return timeout;
-        }
+        // Step 5: Fire-and-forget —— 不阻塞 LLM，立即返回 SINGLE_CALLED/POLLING
+        // 后台轮询由 AsyncTaskPollingScheduler 接管，状态变更经通知中心推给用户。
+        String pollStrategy = task.getPollStrategy() != null ? task.getPollStrategy() : "PERIODIC";
+        asyncTaskPollingService.updateStatusAndLastPolled(task.getId(), "POLLING");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", pollStrategy.equals("SINGLE_CALL") ? "SINGLE_CALLED" : "POLLING");
+        result.put("taskId", task.getId());
+        result.put("externalTaskId", externalTaskId);
+        result.put("message", "任务在后台运行，结果会出现在通知中心");
+        return result;
     }
 
     public static class ExecuteRequest {

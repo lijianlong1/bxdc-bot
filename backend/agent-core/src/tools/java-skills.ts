@@ -293,7 +293,7 @@ import {
   sanitizeToolResultForTrace,
 } from "./tool-trace-context";
 
-function formatToolError(error: unknown): string {
+export function formatToolError(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
     const responseBody = error.response?.data;
@@ -322,7 +322,7 @@ function formatToolError(error: unknown): string {
   }
 }
 
-interface GatewaySkill {
+export interface GatewaySkill {
   id: number;
   name: string;
   description?: string;
@@ -337,7 +337,7 @@ interface GatewaySkill {
   avatar?: string;
 }
 
-interface SkillMutationPayload {
+export interface SkillMutationPayload {
   name: string;
   description: string;
   type: "EXTENSION";
@@ -349,7 +349,7 @@ interface SkillMutationPayload {
   avatar?: string;
 }
 
-interface ExtendedSkillConfig {
+export interface ExtendedSkillConfig {
   kind?: string;
   preset?: string;
   profile?: string;
@@ -393,7 +393,7 @@ interface ExtendedSkillConfig {
   };
 }
 
-interface AsyncPollConfig {
+export interface AsyncPollConfig {
   /** 轮询端点模板，{id} 会被替换为外部任务 ID。SINGLE_CALL 模式下可省略（fallback 到请求 URL）。 */
   pollEndpoint?: string;
   /** 从初始响应中提取任务 ID 的 JSON 路径，如 "data.task_id"。SINGLE_CALL 模式下不需要。 */
@@ -429,7 +429,7 @@ interface AsyncPollConfig {
   singleCallReadTimeoutSeconds?: number;
 }
 
-function readPreset(config: ExtendedSkillConfig): string | undefined {
+export function readPreset(config: ExtendedSkillConfig): string | undefined {
   const value = config.preset ?? config.profile;
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
@@ -644,12 +644,12 @@ export function describeGatewayExtendedTool(toolName: string): { displayName: st
   };
 }
 
-function normalizeParameterBindingValue(raw: unknown): "query" | "jsonBody" | "formBody" | undefined {
+export function normalizeParameterBindingValue(raw: unknown): "query" | "jsonBody" | "formBody" | undefined {
   if (raw === "jsonBody" || raw === "query" || raw === "formBody") return raw;
   return undefined;
 }
 
-function normalizeExtendedConfig(cfg: ExtendedSkillConfig): ExtendedSkillConfig {
+export function normalizeExtendedConfig(cfg: ExtendedSkillConfig): ExtendedSkillConfig {
   const next: ExtendedSkillConfig = { ...cfg };
   const pb = normalizeParameterBindingValue((cfg as { parameterBinding?: unknown }).parameterBinding);
   if (pb) {
@@ -671,7 +671,7 @@ function normalizeExtendedConfig(cfg: ExtendedSkillConfig): ExtendedSkillConfig 
   return next;
 }
 
-function parseSkillConfig(skill: GatewaySkill): ExtendedSkillConfig {
+export function parseSkillConfig(skill: GatewaySkill): ExtendedSkillConfig {
   if (!skill.configuration || !skill.configuration.trim()) return {};
   try {
     const parsed = JSON.parse(skill.configuration);
@@ -814,7 +814,7 @@ function normalizeEnumForValidation(raw: unknown): unknown[] {
   });
 }
 
-function normalizeParameterContractRequired(contract: Record<string, unknown>): Record<string, unknown> {
+export function normalizeParameterContractRequired(contract: Record<string, unknown>): Record<string, unknown> {
   const out = { ...contract };
   const props = out.properties as Record<string, Record<string, unknown>> | undefined;
   if (!props) return out;
@@ -894,7 +894,7 @@ function collectParameterDefaults(parameterContract: unknown): Record<string, st
   return out;
 }
 
-function normalizeGeneratedOperation(value: string): string {
+export function normalizeGeneratedOperation(value: string): string {
   const normalized = value
     .trim()
     .toLowerCase()
@@ -972,7 +972,7 @@ function deriveSkillDescription(input: SkillGeneratorInput, name: string): strin
   return name;
 }
 
-function sanitizeConfigForDisplay(config: ExtendedSkillConfig): ExtendedSkillConfig {
+export function sanitizeConfigForDisplay(config: ExtendedSkillConfig): ExtendedSkillConfig {
   return config;
 }
 
@@ -2027,7 +2027,7 @@ async function executeOpenClawSkill(
   return JSON.stringify({ error: "OPENCLAW skill exceeded the maximum planning steps." });
 }
 
-function gatewaySkillMutationHeaders(apiToken: string, userId?: string): Record<string, string> {
+export function gatewaySkillMutationHeaders(apiToken: string, userId?: string): Record<string, string> {
   const headers: Record<string, string> = {
     "X-Agent-Token": apiToken,
     "Content-Type": "application/json",
@@ -2038,7 +2038,7 @@ function gatewaySkillMutationHeaders(apiToken: string, userId?: string): Record<
   return headers;
 }
 
-function gatewaySkillReadHeaders(apiToken: string, userId?: string): Record<string, string> {
+export function gatewaySkillReadHeaders(apiToken: string, userId?: string): Record<string, string> {
   const headers: Record<string, string> = {
     "X-Agent-Token": apiToken,
   };
@@ -2247,6 +2247,8 @@ export async function loadGatewayExtendedTools(
     plannerModel?: any;
     /** Base agent tools (including structured tools such as compute). */
     availableTools?: BindableAgentTool[];
+    /** Session id passed to gateway execute endpoint (used for audit/confirmation/async task) */
+    sessionId?: string;
   },
 ): Promise<StructuredTool[]> {
   try {
