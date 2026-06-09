@@ -219,6 +219,8 @@ public class SystemSkillController {
         pollVisibleWhen.put("equals", "PERIODIC");
         asyncPoll.put("visibleWhen", pollVisibleWhen);
         asyncPoll.put("aiHint", "启用后 Gateway 内部完成轮询闭环。示例: {\"pollEndpoint\":\"...\",\"idJsonPath\":\"$.taskId\",\"completionJsonPath\":\"$.status\",\"completionValue\":\"COMPLETED\"}");
+        asyncPoll.put("placeholder", "{\n  \"pollEndpoint\": \"https://api.example.com/tasks/{id}\",\n  \"pollMethod\": \"GET\",\n  \"idJsonPath\": \"$.taskId\",\n  \"pollIntervalSeconds\": 5,\n  \"maxWaitSeconds\": 600,\n  \"completionJsonPath\": \"$.status\",\n  \"completionValue\": \"COMPLETED\",\n  \"failedValues\": [\"FAILED\", \"CANCELLED\"],\n  \"resultJsonPath\": \"$.result\"\n}");
+        asyncPoll.put("default", "{\n  \"pollEndpoint\": \"https://api.example.com/tasks/{id}\",\n  \"pollMethod\": \"GET\",\n  \"idJsonPath\": \"$.taskId\",\n  \"pollIntervalSeconds\": 5,\n  \"maxWaitSeconds\": 600,\n  \"completionJsonPath\": \"$.status\",\n  \"completionValue\": \"COMPLETED\",\n  \"failedValues\": [\"FAILED\", \"CANCELLED\"],\n  \"resultJsonPath\": \"$.result\"\n}");
         props.put("asyncPoll", asyncPoll);
 
         schema.put("properties", props);

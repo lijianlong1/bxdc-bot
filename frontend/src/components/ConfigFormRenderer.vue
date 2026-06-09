@@ -157,7 +157,7 @@ function handleOptimize(key: string) {
 
     <div v-else-if="prop.ui === 'textarea' || prop.ui === 'jsonEditor' || prop.ui === 'keyValue'" class="optimize-textarea-wrap">
       <t-textarea
-        :model-value="prop.ui === 'jsonEditor' || prop.ui === 'keyValue' ? formatJsonValue(getFieldValue(key)) : String(getFieldValue(key) ?? '')"
+        :model-value="prop.ui === 'jsonEditor' || prop.ui === 'keyValue' ? formatJsonValue(getFieldValue(key) ?? prop.default) : String(getFieldValue(key) ?? '')"
         :placeholder="prop.placeholder"
         :autosize="{ minRows: 3, maxRows: 8 }"
         @change="(val: string) => prop.ui === 'jsonEditor' || prop.ui === 'keyValue' ? handleJsonChange(key, val) : setFieldValue(key, val)"

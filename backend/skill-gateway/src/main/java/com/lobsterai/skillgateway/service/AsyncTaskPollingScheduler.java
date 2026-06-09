@@ -234,7 +234,18 @@ public class AsyncTaskPollingScheduler {
                 auditService.log(netErrLog);
 
                 if (singleCallMode) {
-                    if (netEx instanceof SocketTimeoutException) {
+                    // Spring 把 SocketTimeoutException 包在 ResourceAccessException 里，
+                    // 直接 instanceof 匹配不到。沿 cause 链找真正的超时原因。
+                    Throwable cause = netEx;
+                    boolean isTimeout = false;
+                    while (cause != null) {
+                        if (cause instanceof SocketTimeoutException) {
+                            isTimeout = true;
+                            break;
+                        }
+                        cause = cause.getCause();
+                    }
+                    if (isTimeout) {
                         // SINGLE_CALL 模式 read timeout 到期 → 标 TIMEOUT
                         String err = "SINGLE_CALL read timeout after " + readTimeoutSeconds + "s";
                         pollingService.updatePollResult(task.getId(), "TIMEOUT", null, err);
