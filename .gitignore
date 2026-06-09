@@ -33,7 +33,9 @@ backend/skill-gateway/src/main/resources/application-local.properties
 
 # Database & runtime data
 backend/skill-gateway/data/
-backend/skill-gateway/.m2-test/
+# Maven 本地 repo（100MB+，离线 build 用，不进 git；拷贝到内网用 Desktop 上的 m2-offline-bundle.tar.*）
+backend/skill-gateway/.m2/
+backend/skill-gateway/.m2-test
 backend/skill-gateway/skills-export.csv
 backend/skill-gateway/seed-snapshot.mv.db
 backend/agent-core/memories.db
@@ -53,3 +55,5 @@ backend/skill-gateway/apache-maven-3.9.6/
 start-services.bat
 stop-services.bat
 
+# Maven local repo (offline build cache, ignore)
+backend/skill-gateway/.m2/**
