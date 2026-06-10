@@ -49,7 +49,7 @@ frontend-react-backup/
 skills/
 
 # Maven
-backend/skill-gateway/apache-maven-3.9.6/
+backend/skill-gateway/apache-maven-*/
 
 # One-click scripts
 start-services.bat
