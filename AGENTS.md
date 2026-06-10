@@ -18,7 +18,7 @@
 **本地开发（不需要 dist）：**
 ```bash
 # 启动 3 个服务（都走源码，不走 dist）
-cd backend/skill-gateway && ./apache-maven-3.9.6/bin/mvn spring-boot:run
+cd backend/skill-gateway && ./apache-maven-3.8.5/bin/mvn spring-boot:run
 cd backend/agent-core && npm run start:dev   # nest start --watch 走 ts-node
 cd frontend && npm run dev                    # Vite 实时编译
 ```
@@ -70,7 +70,7 @@ cd backend/agent-core && npm run build
 ### 一键启动（3 个服务）
 ```bash
 # 不同 terminal
-cd backend/skill-gateway && ./apache-maven-3.9.6/bin/mvn spring-boot:run
+cd backend/skill-gateway && ./apache-maven-3.8.5/bin/mvn spring-boot:run
 cd backend/agent-core && npm run start:dev
 cd frontend && npm run dev
 ```
